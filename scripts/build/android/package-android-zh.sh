@@ -41,7 +41,10 @@ if [[ ! -d "${ANDROID_NDK_HOME}" ]]; then
     echo "ERROR: ANDROID_NDK_HOME not found: ${ANDROID_NDK_HOME}"
     exit 1
 fi
-if [[ ! -d "${REPO_ROOT}/references/fbraz3-dxvk/.git" ]]; then
+# GeneralsX @bugfix build 11/08/2026 A git submodule's .git is a *file* (a
+# gitdir pointer), not a directory, so the old -d test always failed here and
+# aborted packaging even when the submodule was correctly initialized. Use -e.
+if [[ ! -e "${REPO_ROOT}/references/fbraz3-dxvk/.git" ]]; then
     echo "ERROR: DXVK fork submodule missing. Run: git submodule update --init references/fbraz3-dxvk"
     exit 1
 fi
