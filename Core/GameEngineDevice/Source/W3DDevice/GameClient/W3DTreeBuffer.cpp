@@ -1184,19 +1184,35 @@ void W3DTreeBuffer::unitMoved(Object *unit)
 					treeNdx = m_trees[treeNdx].nextInPartition;
 					continue;	//  Tree is deleted. [7/11/2003]
 				}
+				// GeneralsX @bugfix Issue #8 11/08/2026 Bounds-check treeType and null-check
+				// m_data before dereferencing. Only slots [0,m_numTreeTypes) are initialized;
+				// an out-of-range treeType yields a null m_data and the subsequent deref at
+				// offset 0x20 crashes (SIGSEGV, fault addr 0x20) when a garrisoned unit's
+				// redeploy motion sweeps it across a stale tree-partition cell. Mirrors the
+				// load-path guard at ~line 2009 (treeType < m_numTreeTypes).
+				Int gxTreeType = m_trees[treeNdx].treeType;
+				if (gxTreeType >= m_numTreeTypes) {
+					treeNdx = m_trees[treeNdx].nextInPartition;
+					continue;
+				}
+				const W3DTreeDrawModuleData* gxTreeData = m_treeTypes[gxTreeType].m_data;
+				if (!gxTreeData) {
+					treeNdx = m_trees[treeNdx].nextInPartition;
+					continue;
+				}
 				Coord3D delta;
 				delta.set(m_trees[treeNdx].location.X, m_trees[treeNdx].location.Y, m_trees[treeNdx].location.Z );
 				delta.sub(&pos);
 				if (radius*radius>delta.lengthSqr()) {
 					bool canTopple = unit->getCrusherLevel() > 1;
-					if (canTopple && m_treeTypes[m_trees[treeNdx].treeType].m_data->m_doTopple) {
+					if (canTopple && gxTreeData->m_doTopple) {
 						// Give a vector with direction to thing.
 						Coord3D toppleVector;
 						toppleVector.set(m_trees[treeNdx].location.X, m_trees[treeNdx].location.Y, 0);
 						toppleVector.x -= unit->getPosition()->x;
 						toppleVector.y -= unit->getPosition()->y;
 						applyTopplingForce(m_trees+treeNdx, &toppleVector, 0, W3D_TOPPLE_OPTIONS_NONE);
-					} else if (m_treeTypes[m_trees[treeNdx].treeType].m_data->m_framesToMoveOutward>1) {
+					} else if (gxTreeData->m_framesToMoveOutward>1) {
 						pushAsideTree(m_trees[treeNdx].drawableID, &pos, unit->getUnitDirectionVector2D(), unit->getID());
 					}
 				}
@@ -1461,6 +1477,11 @@ Bool W3DTreeBuffer::updateTreePosition(DrawableID id, Coord3D location, Real ang
 	Int i;
 	for (i=0; i<m_numTrees; i++) {
 		if (m_trees[i].drawableID == id) {
+			// GeneralsX @bugfix Issue #8 11/08/2026 Bounds-check treeType before indexing
+			// m_treeTypes; a deleted/out-of-range entry reads uninitialized m_bounds.
+			if (m_trees[i].treeType < 0 || m_trees[i].treeType >= m_numTreeTypes) {
+				return false;
+			}
 			m_trees[i].location = Vector3(location.x, location.y, location.z);
 			m_trees[i].sin = WWMath::Sin(angle);
 			m_trees[i].cos = WWMath::Cos(angle);
@@ -1487,6 +1508,13 @@ void W3DTreeBuffer::pushAsideTree(DrawableID id, const Coord3D *pusherPos,
 	Int i;
 	for (i=0; i<m_numTrees; i++) {
 		if (m_trees[i].drawableID == id) {
+			// GeneralsX @bugfix Issue #8 11/08/2026 Guard treeType bounds + m_data null
+			// before deref (same hazard as unitMoved). A deleted/out-of-range entry must
+			// not reach the m_data->m_framesToMoveOutward deref below.
+			if (m_trees[i].treeType < 0 || m_trees[i].treeType >= m_numTreeTypes ||
+				!m_treeTypes[m_trees[i].treeType].m_data) {
+				return;
+			}
 			UnsignedInt lastFrame = m_trees[i].lastFrameUpdated;
 			m_trees[i].lastFrameUpdated = TheGameLogic->getFrame();
 			if(m_trees[i].pushAsideSource == pusherID) {
