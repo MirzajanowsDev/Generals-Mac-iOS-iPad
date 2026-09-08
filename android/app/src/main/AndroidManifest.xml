@@ -37,18 +37,27 @@
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen"
         android:icon="@mipmap/ic_launcher">
 
+        <!-- GeneralsX @feature android-port 08/09/2026 (issue #12) MainActivity
+             is the launcher: it checks for game data and offers a one-time SAF
+             import into internal storage (Android 13+ blocks file managers from
+             writing into Android/data/), then hands off to GameActivity. -->
         <activity
-            android:name=".GameActivity"
-            android:exported="true"
-            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode|fontScale|density"
-            android:launchMode="singleInstance"
-            android:screenOrientation="landscape"
-            android:resizeableActivity="false">
+            android:name=".MainActivity"
+            android:exported="true">
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+        </activity>
+
+        <activity
+            android:name=".GameActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation|uiMode|fontScale|density"
+            android:launchMode="singleInstance"
+            android:screenOrientation="landscape"
+            android:resizeableActivity="false">
         </activity>
     </application>
 </manifest>
