@@ -6,20 +6,28 @@ if(RTS_BUILD_OPTION_ASAN)
     set(RTS_GAMEMEMORY_ENABLE OFF)
 endif()
 
-# GeneralsX @bugfix android-port 14/07/2026 Disable memory pool debug features
-# on Android. When MEMORYPOOL_DEBUG is ON, every freed block is filled with
-# GARBAGE_FILL_VALUE (0xDEADBEEF) by debugMarkBlockAsFree(). On Android, DXVK's
-# internal C++ objects share the same operator new/delete (flat ELF namespace).
-# When DXVK recycles an object via operator delete, the pool garbage-fills the
-# block, destroying DXVK's DxvkResourceAllocationPool free-list pointers. The
-# next allocation reads the garbage pointer (0x2000000001) and crashes.
-# Disabling debug features prevents the garbage-fill, letting DXVK's recycled
-# objects survive intact.
+# GeneralsX @bugfix android-port 08/09/2026 Disable memory pool debug features
+# on Android. MEMORYPOOL_DEBUG garbage-fills freed blocks (0xDEADBEEF), which
+# is hostile to any code recycling memory through the same allocator (see the
+# DxvkResourceAllocationPool free-list corruption investigated on 08/09).
+#
+# NOTE — the engine memory pool itself (RTS_GAMEMEMORY_ENABLE) is deliberately
+# KEPT ENABLED on Android for now. Disabling it (the ASAN configuration) makes
+# engine allocations share Scudo's heap with DXVK, and an as-yet-unlocated
+# engine-side heap overflow then corrupts DXVK's allocation free-lists —
+# deterministic SIGSEGV 0x2000000001 in DxvkResourceAllocationPool::alloc()
+# during shadow rendering on the OnePlus Pad (verified 08/09/2026). With the
+# pool enabled, the overflow lands in pool slack instead (harmless there),
+# which is also why the Scudo aborts in issues #4/#9/#6/#7/#10 are
+# device-dependent. The pool can only be retired once the overflow is found;
+# an ASAN-instrumented build is prepared (RTS_BUILD_OPTION_ASAN=ON scopes
+# instrumentation to engine targets via core_config) but blocked on-device by
+# an NDK r27 ASAN-runtime SIGILL on the OnePlus Pad.
 if(ANDROID)
     set(RTS_MEMORYPOOL_DEBUG OFF)
     set(RTS_MEMORYPOOL_DEBUG_BOUNDINGWALL OFF)
     set(RTS_MEMORYPOOL_DEBUG_CUSTOM_NEW OFF)
-    message(STATUS "Android: Memory pool debug disabled (DXVK compatibility)")
+    message(STATUS "Android: Memory pool debug disabled (pool itself kept on; see comment above)")
 endif()
 
 # Memory pool features
