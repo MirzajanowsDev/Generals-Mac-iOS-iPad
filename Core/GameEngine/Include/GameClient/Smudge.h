@@ -23,6 +23,11 @@
 #include "WW3D2/dllist.h"
 #include "WWMath/vector2.h"
 #include "WWMath/vector3.h"
+// GeneralsX @bugfix android-port 08/09/2026 Uses std::hash_map, which only
+// exists on modern toolchains via the adapter below. The target PCH used to
+// include it transitively; include it directly so the header is
+// self-contained in PCH-less builds.
+#include <Utility/hash_map_adapter.h>
 
 #define SET_SMUDGE_PARAMETERS(smudge,pos,offset,size,opacity) (smudge->m_pos=pos;smudge->m_offset=offset;smudge->m_size=size;smudge->m_opacity=opacity;)
 

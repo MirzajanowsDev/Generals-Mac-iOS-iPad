@@ -45,6 +45,11 @@
 
 #pragma once
 
+// GeneralsX @bugfix android-port 08/09/2026 This header uses the CPP_11 macro
+// for the enum's fixed underlying type but never included its definition —
+// the target PCH masked that. Include it so the header is self-contained.
+#include <Utility/CppMacros.h>
+
 /**
 	An ErrorCode is the repository for failure modes. In almost all situations,
 	these values will  be THROWN, not returned as error codes. Feel free

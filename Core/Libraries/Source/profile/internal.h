@@ -29,6 +29,11 @@
 
 #pragma once
 
+// GeneralsX @bugfix android-port 08/09/2026 Uses CPP_11; the target PCH used
+// to include CppMacros.h before this header. Include it directly so the
+// header is self-contained in PCH-less builds.
+#include <Utility/CppMacros.h>
+
 #include <Utility/intrin_compat.h>
 
 #include "../debug/debug.h"

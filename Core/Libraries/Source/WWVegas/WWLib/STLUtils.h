@@ -18,6 +18,11 @@
 
 #pragma once
 
+// GeneralsX @bugfix android-port 08/09/2026 Include CppMacros.h for the CPP_11
+// macro used below. The PCH used to provide it transitively; with PCH disabled
+// (ASAN diagnostic builds) this header must be self-contained.
+#include "Utility/CppMacros.h"
+
 #include <algorithm>
 #include <cstddef>
 #include <map>

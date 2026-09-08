@@ -34,6 +34,12 @@
 // TheSuperHackers @build feliwir 07/04/2025 Adds utility macros for cross-platform compatibility
 #include <Utility/compat.h>
 #include <Utility/stdint_adapter.h>
+// GeneralsX @bugfix android-port 08/09/2026 Provide CPP_11 and friends to every
+// engine TU. Headers like Common/Errors.h and WWLib/STLUtils.h use CPP_11
+// without including CppMacros.h themselves; the target PCHs masked that,
+// and PCH-less builds (ASAN diagnostics) broke with "use of undeclared
+// identifier CPP_11".
+#include <Utility/CppMacros.h>
 
 /*
 **	Turn off some unneeded warnings.
