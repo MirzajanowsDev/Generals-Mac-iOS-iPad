@@ -77,7 +77,17 @@ if(RTS_BUILD_OPTION_ASAN)
         add_compile_options(/fsanitize=address)
         add_link_options(/fsanitize=address)
     else()
-        add_compile_options(-fsanitize=address)
+        # GeneralsX @bugfix android-port 08/09/2026 Scope the ASAN compile flag
+        # to the engine via core_config instead of add_compile_options. Global
+        # instrumentation breaks FetchContent third-party code: SDL3's
+        # hidapi/android/hid.cpp fails against NDK jni.h under ASAN
+        # ("__builtin_va_list cannot bind to std::__va_list"). The engine
+        # targets carry core_config in their link interface (same mechanism
+        # config-memory.cmake uses for DISABLE_GAMEMEMORY), so the flag reaches
+        # every engine TU while SDL3/OpenAL/FreeType/GLM stay uninstrumented.
+        # The LINK option stays global: it only decides which shared libraries
+        # pull in the ASAN runtime, which is harmless for third-party.
+        set(RTS_ASAN_COMPILE_FLAGS -fsanitize=address)
         add_link_options(-fsanitize=address)
     endif()
 endif()
