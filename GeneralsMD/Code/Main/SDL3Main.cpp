@@ -35,6 +35,7 @@
 #include <android/log.h>
 #include <android/asset_manager.h>
 #include <android/asset_manager_jni.h>
+#include <android/native_window.h>
 #endif
 #if defined(__APPLE__)
 #include <TargetConditionals.h>
@@ -338,7 +339,15 @@ int main(int argc, char* argv[])
 				__android_log_print(ANDROID_LOG_INFO, "GeneralsX", "CWD -> %s (external)", gameData);
 				chdirOk = true;
 			}
-			SDL_free((void*)extFiles);
+			// GeneralsX @bugfix android-port 08/09/2026 Do NOT SDL_free() the
+			// pointer: SDL_GetAndroidExternalStoragePath() returns SDL's cached
+			// static (s_AndroidExternalFilesPath), owned by SDL for the process
+			// lifetime. Freeing it corrupted the cache; the second call below then
+			// returned the dangling pointer and freed it AGAIN — a use-after-free
+			// read plus double free that Scudo reports as "invalid chunk state"
+			// in SDL_main (issues #4/#9), or, when the recycled chunk was already
+			// live again, silently poisoned unrelated heap data — the source of
+			// the DXVK 0x2000000001 free-list corruption crashes.
 		}
 		if (!chdirOk && files != nullptr) {
 			char gameData[1024];
@@ -366,14 +375,12 @@ int main(int argc, char* argv[])
 			if (extFiles2 != nullptr) {
 				snprintf(fontsDir, sizeof(fontsDir), "%s/GameData/fonts", extFiles2);
 				extractBase = fontsDir;
-				SDL_free((void*)extFiles2);
 			}
 			if (extractBase == nullptr) {
 				const char *intFiles2 = SDL_GetAndroidInternalStoragePath();
 				if (intFiles2 != nullptr) {
 					snprintf(fontsDir, sizeof(fontsDir), "%s/GameData/fonts", intFiles2);
 					extractBase = fontsDir;
-					SDL_free((void*)intFiles2);
 				}
 			}
 
@@ -450,7 +457,6 @@ int main(int argc, char* argv[])
 			const char *cache = SDL_GetAndroidCachePath();
 			if (cache != nullptr) {
 				setenv("DXVK_STATE_CACHE_PATH", cache, 0);
-				SDL_free((void*)cache);
 			}
 			// Capped, filtered stderr file sink (post-mortem evidence after a kill).
 			char logPath[1100], prevPath[1100];
@@ -468,7 +474,7 @@ int main(int argc, char* argv[])
 				dup2(s_logFd, STDERR_FILENO);
 				setvbuf(stderr, nullptr, _IOLBF, 0);
 			}
-			SDL_free((void*)files);
+			// files/extFiles/cache are SDL-owned cached statics — never freed here.
 		}
 	}
 #elif defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
@@ -766,22 +772,43 @@ int main(int argc, char* argv[])
 		// ANativeWindow is ready, the Vulkan driver dereferences null and crashes
 		// (fault addr 0x98). Poll SDL events until the window has a valid surface
 		// or timeout after 5 seconds.
+		//
+		// GeneralsX @bugfix android-port 08/09/2026 Also wait for a non-degenerate
+		// buffer size. On Meta Quest 3 / Horizon OS the volumetric panel reports a
+		// 1x1 ANativeWindow until the compositor lays it out; creating the Vulkan
+		// surface in that state null-derefs inside the vendor driver
+		// (vkCreateAndroidSurfaceKHR, fault addr 0x98) even though the pointer is
+		// non-null. Issue #11.
 		{
 			SDL_PropertiesID props = SDL_GetWindowProperties(TheSDL3Window);
 			void *nativeWin = nullptr;
+			bool sizeValid = false;
 			int waitMs = 0;
 			while (waitMs < 5000) {
 				nativeWin = SDL_GetPointerProperty(props,
 					SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER, nullptr);
-				if (nativeWin) break;
+				if (nativeWin != nullptr) {
+					int bufW = ANativeWindow_getWidth((ANativeWindow *)nativeWin);
+					int bufH = ANativeWindow_getHeight((ANativeWindow *)nativeWin);
+					if (bufW > 1 && bufH > 1) {
+						sizeValid = true;
+						break;
+					}
+				}
 				SDL_Event ev;
 				while (SDL_PollEvent(&ev)) { /* drain */ }
 				SDL_Delay(50);
 				waitMs += 50;
 			}
-			if (nativeWin) {
+			if (nativeWin != nullptr && sizeValid) {
 				__android_log_print(ANDROID_LOG_INFO, "GeneralsX",
-					"ANativeWindow ready after %dms", waitMs);
+					"ANativeWindow ready after %dms (%dx%d)",
+					waitMs,
+					ANativeWindow_getWidth((ANativeWindow *)nativeWin),
+					ANativeWindow_getHeight((ANativeWindow *)nativeWin));
+			} else if (nativeWin != nullptr) {
+				__android_log_print(ANDROID_LOG_WARN, "GeneralsX",
+					"ANativeWindow size still degenerate after 5000ms — CreateDevice may crash");
 			} else {
 				__android_log_print(ANDROID_LOG_WARN, "GeneralsX",
 					"ANativeWindow NOT ready after 5000ms — CreateDevice may crash");
