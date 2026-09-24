@@ -6,67 +6,103 @@ on:
 jobs:
   build-ios:
     runs-on: macos-latest
+    timeout-minutes: 120
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           submodules: recursive
+          fetch-depth: 0
 
       - name: Install dependencies
         run: |
-          brew install cmake ninja meson pkgconf xcodegen
+          brew update
+          brew install \
+            cmake \
+            ninja \
+            meson \
+            pkgconf \
+            xcodegen \
+            python3 \
+            glslang \
+            spirv-tools
+
+          echo "=== Tool versions ==="
+          cmake --version
+          ninja --version
+          meson --version
+          glslangValidator --version
 
       - name: Install vcpkg
         run: |
-          git clone https://github.com/microsoft/vcpkg ~/vcpkg
-          ~/vcpkg/bootstrap-vcpkg.sh
+          if [ ! -d "$HOME/vcpkg" ]; then
+            git clone https://github.com/microsoft/vcpkg "$HOME/vcpkg"
+          fi
+
+          "$HOME/vcpkg/bootstrap-vcpkg.sh" -disableMetrics
+
           echo "VCPKG_ROOT=$HOME/vcpkg" >> "$GITHUB_ENV"
 
       - name: Initialize DXVK submodule
         run: |
-          git submodule update --init references/fbraz3-dxvk
+          git submodule update --init --recursive references/fbraz3-dxvk
 
-      - name: Download Vulkan SDK
+      - name: Build MoltenVK for iOS
         run: |
-          mkdir -p "$HOME/VulkanSDK"
+          cd "$RUNNER_TEMP"
 
-          curl -L \
-            -o /tmp/vulkansdk.zip \
-            https://sdk.lunarg.com/sdk/download/latest/mac/vulkan-sdk.zip
+          git clone --depth 1 \
+            https://github.com/KhronosGroup/MoltenVK.git \
+            MoltenVK
 
-          unzip -q /tmp/vulkansdk.zip -d "$HOME/VulkanSDK"
+          cd MoltenVK
 
-          echo "=== Vulkan SDK contents ==="
-          find "$HOME/VulkanSDK" -name "libMoltenVK.a" -print
+          ./fetchDependencies --ios
+          make ios
 
-      - name: Detect Vulkan SDK
+          echo "=== MoltenVK libraries ==="
+          find . -name "libMoltenVK.a" -print
+
+      - name: Prepare Vulkan SDK
         run: |
-          MOLTENVK_LIB=$(find "$HOME/VulkanSDK" \
-            -path "*/lib/MoltenVK.xcframework/ios-arm64/libMoltenVK.a" \
+          SDK_ROOT="$RUNNER_TEMP/VulkanSDK"
+
+          mkdir -p \
+            "$SDK_ROOT/lib/MoltenVK.xcframework/ios-arm64"
+
+          MOLTENVK_LIB=$(find "$RUNNER_TEMP/MoltenVK" \
+            -name "libMoltenVK.a" \
+            -path "*ios*" \
             | head -n 1)
 
           if [ -z "$MOLTENVK_LIB" ]; then
-            echo "ERROR: Static libMoltenVK.a not found"
-            find "$HOME/VulkanSDK" -iname "*MoltenVK*" -print
+            echo "ERROR: libMoltenVK.a not found"
             exit 1
           fi
 
           echo "Found MoltenVK:"
           echo "$MOLTENVK_LIB"
 
-          SDK_ROOT="${MOLTENVK_LIB%/lib/MoltenVK.xcframework/ios-arm64/libMoltenVK.a}"
+          cp "$MOLTENVK_LIB" \
+            "$SDK_ROOT/lib/MoltenVK.xcframework/ios-arm64/libMoltenVK.a"
 
-          echo "VULKAN_SDK=$SDK_ROOT"
           echo "VULKAN_SDK=$SDK_ROOT" >> "$GITHUB_ENV"
 
       - name: Verify Vulkan SDK
         run: |
           echo "VULKAN_SDK=$VULKAN_SDK"
 
-          test -f "$VULKAN_SDK/lib/MoltenVK.xcframework/ios-arm64/libMoltenVK.a"
+          test -f \
+            "$VULKAN_SDK/lib/MoltenVK.xcframework/ios-arm64/libMoltenVK.a"
 
-          ls -lah "$VULKAN_SDK/lib/MoltenVK.xcframework/ios-arm64/"
+          ls -lah \
+            "$VULKAN_SDK/lib/MoltenVK.xcframework/ios-arm64/"
+
+      - name: Verify glslang
+        run: |
+          which glslangValidator
+          glslangValidator --version
 
       - name: Fetch runtime MoltenVK
         run: |
@@ -81,26 +117,33 @@ jobs:
       - name: Configure iOS build
         run: |
           echo "Using VULKAN_SDK=$VULKAN_SDK"
+          echo "glslangValidator=$(which glslangValidator)"
+
           cmake --preset ios-vulkan
 
-      - name: Build Generals
+      - name: Build Generals Zero Hour
         run: |
           cmake --build build/ios-vulkan \
             --target z_generals \
             --parallel 3
 
-      - name: Find generated app
+      - name: Find generated application
         if: always()
         run: |
-          echo "=== Generated apps ==="
-          find build -name "*.app" -print || true
+          echo "=== iOS app bundles ==="
+          find build -type d -name "*.app" -print || true
 
-          echo "=== Generals binaries ==="
-          find build -name "GeneralsXZH" -print || true
+          echo "=== GeneralsXZH executable ==="
+          find build -type f -name "GeneralsXZH" -print || true
 
-      - name: Upload compiled files
+          echo "=== GeneralsMD directory ==="
+          ls -lah build/ios-vulkan/GeneralsMD/ || true
+
+      - name: Upload iOS app
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: generals-ios-build
-          path: build/ios-vulkan
+          name: GeneralsXZH-iOS
+          path: build/ios-vulkan/GeneralsMD/GeneralsXZH.app
+          retention-days: 7
+          if-no-files-found: error
