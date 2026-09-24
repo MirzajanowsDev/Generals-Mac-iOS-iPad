@@ -18,7 +18,6 @@ jobs:
       - name: Install dependencies
         run: |
           brew update
-
           brew install \
             cmake \
             ninja \
@@ -30,51 +29,45 @@ jobs:
             spirv-tools
 
           BREW_PREFIX="$(brew --prefix)"
+          GLSLANG_PREFIX="$(brew --prefix glslang)"
 
           echo "$BREW_PREFIX/bin" >> "$GITHUB_PATH"
-          echo "$BREW_PREFIX/sbin" >> "$GITHUB_PATH"
-
-          echo "=== Homebrew prefix ==="
-          echo "$BREW_PREFIX"
+          echo "$GLSLANG_PREFIX/bin" >> "$GITHUB_PATH"
 
           echo "=== Installed tools ==="
           cmake --version
           ninja --version
           meson --version
 
-      - name: Setup glslang
+          echo "=== glslang ==="
+          echo "GLSLANG_PREFIX=$GLSLANG_PREFIX"
+          ls -lah "$GLSLANG_PREFIX/bin"
+
+          test -x "$GLSLANG_PREFIX/bin/glslangValidator"
+          "$GLSLANG_PREFIX/bin/glslangValidator" --version
+
+      - name: Configure shader tools PATH
         run: |
+          GLSLANG_PREFIX="$(brew --prefix glslang)"
           BREW_PREFIX="$(brew --prefix)"
 
-          GLSLANG_VALIDATOR="$(find "$BREW_PREFIX" \
-            -type f \
-            -name "glslangValidator" \
-            2>/dev/null \
-            | head -n 1)"
+          echo "$GLSLANG_PREFIX/bin" >> "$GITHUB_PATH"
+          echo "$BREW_PREFIX/bin" >> "$GITHUB_PATH"
 
-          if [ -z "$GLSLANG_VALIDATOR" ]; then
-            echo "ERROR: glslangValidator not found"
+          echo "GLSLANG_BIN=$GLSLANG_PREFIX/bin" >> "$GITHUB_ENV"
 
-            echo "=== brew info glslang ==="
-            brew info glslang || true
+      - name: Verify glslang
+        run: |
+          export PATH="$GLSLANG_BIN:/opt/homebrew/bin:/usr/local/bin:$PATH"
 
-            echo "=== brew list glslang ==="
-            brew list glslang || true
+          echo "PATH=$PATH"
 
-            echo "=== searching Homebrew ==="
-            find "$BREW_PREFIX" -iname "*glslang*" -print || true
+          which glslangValidator
+          glslangValidator --version
 
-            exit 1
-          fi
-
-          echo "Found glslangValidator:"
-          echo "$GLSLANG_VALIDATOR"
-
-          GLSLANG_DIR="$(dirname "$GLSLANG_VALIDATOR")"
-
-          echo "$GLSLANG_DIR" >> "$GITHUB_PATH"
-
-          "$GLSLANG_VALIDATOR" --version
+          which glslang || true
+          which spirv-as || true
+          which spirv-dis || true
 
       - name: Install vcpkg
         run: |
@@ -86,8 +79,6 @@ jobs:
 
           echo "VCPKG_ROOT=$HOME/vcpkg" >> "$GITHUB_ENV"
 
-          echo "VCPKG_ROOT=$HOME/vcpkg"
-
       - name: Initialize DXVK submodule
         run: |
           git submodule update --init --recursive references/fbraz3-dxvk
@@ -96,11 +87,11 @@ jobs:
         run: |
           cd "$RUNNER_TEMP"
 
-          if [ ! -d "MoltenVK" ]; then
-            git clone --depth 1 \
-              https://github.com/KhronosGroup/MoltenVK.git \
-              MoltenVK
-          fi
+          rm -rf MoltenVK
+
+          git clone --depth 1 \
+            https://github.com/KhronosGroup/MoltenVK.git \
+            MoltenVK
 
           cd MoltenVK
 
@@ -114,6 +105,8 @@ jobs:
       - name: Prepare Vulkan SDK
         run: |
           SDK_ROOT="$RUNNER_TEMP/VulkanSDK"
+
+          rm -rf "$SDK_ROOT"
 
           mkdir -p \
             "$SDK_ROOT/lib/MoltenVK.xcframework/ios-arm64"
@@ -142,9 +135,6 @@ jobs:
 
           echo "VULKAN_SDK=$SDK_ROOT" >> "$GITHUB_ENV"
 
-          echo "Prepared Vulkan SDK:"
-          find "$SDK_ROOT" -type f -print
-
       - name: Verify Vulkan SDK
         run: |
           echo "VULKAN_SDK=$VULKAN_SDK"
@@ -155,54 +145,38 @@ jobs:
           ls -lah \
             "$VULKAN_SDK/lib/MoltenVK.xcframework/ios-arm64/"
 
-      - name: Verify shader tools
-        run: |
-          echo "PATH=$PATH"
-
-          echo "=== glslangValidator ==="
-          which glslangValidator
-          glslangValidator --version
-
-          echo "=== glslang ==="
-          which glslang || true
-
-          echo "=== spirv tools ==="
-          which spirv-as || true
-          which spirv-dis || true
-
       - name: Fetch runtime MoltenVK
         run: |
           chmod +x ./scripts/build/ios/fetch-moltenvk.sh
-
           ./scripts/build/ios/fetch-moltenvk.sh
 
       - name: Stage fonts
         run: |
           chmod +x ./scripts/build/ios/stage-fonts.sh
-
           ./scripts/build/ios/stage-fonts.sh
 
       - name: Configure iOS build
-        env:
-          PATH: /opt/homebrew/bin:/usr/local/bin:${{ env.PATH }}
         run: |
-          echo "=== Configuration environment ==="
+          export PATH="$GLSLANG_BIN:/opt/homebrew/bin:/usr/local/bin:$PATH"
 
+          echo "=== Configure environment ==="
           echo "VULKAN_SDK=$VULKAN_SDK"
           echo "VCPKG_ROOT=$VCPKG_ROOT"
           echo "PATH=$PATH"
 
+          echo "=== Shader compiler ==="
           which glslangValidator
           glslangValidator --version
+
+          rm -rf build/ios-vulkan
 
           cmake --preset ios-vulkan
 
       - name: Build Generals Zero Hour
-        env:
-          PATH: /opt/homebrew/bin:/usr/local/bin:${{ env.PATH }}
         run: |
-          echo "=== Build environment ==="
+          export PATH="$GLSLANG_BIN:/opt/homebrew/bin:/usr/local/bin:$PATH"
 
+          echo "=== Build environment ==="
           which glslangValidator
           glslangValidator --version
 
@@ -220,14 +194,14 @@ jobs:
             -name "*.app" \
             -print || true
 
-          echo "=== GeneralsXZH binaries ==="
+          echo "=== GeneralsXZH executable ==="
 
           find build \
             -type f \
             -name "GeneralsXZH" \
             -print || true
 
-          echo "=== GeneralsMD directory ==="
+          echo "=== GeneralsMD ==="
 
           ls -lah \
             build/ios-vulkan/GeneralsMD/ \
