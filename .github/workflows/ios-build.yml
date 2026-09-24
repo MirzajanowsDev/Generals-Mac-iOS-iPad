@@ -27,7 +27,6 @@ jobs:
         run: |
           git submodule update --init references/fbraz3-dxvk
 
-      # Static MoltenVK for compiling/linking
       - name: Download Vulkan SDK
         run: |
           mkdir -p "$HOME/VulkanSDK"
@@ -53,7 +52,7 @@ jobs:
             exit 1
           fi
 
-          echo "Found:"
+          echo "Found MoltenVK:"
           echo "$MOLTENVK_LIB"
 
           SDK_ROOT="${MOLTENVK_LIB%/lib/MoltenVK.xcframework/ios-arm64/libMoltenVK.a}"
@@ -65,13 +64,10 @@ jobs:
         run: |
           echo "VULKAN_SDK=$VULKAN_SDK"
 
-          test -f \
-            "$VULKAN_SDK/lib/MoltenVK.xcframework/ios-arm64/libMoltenVK.a"
+          test -f "$VULKAN_SDK/lib/MoltenVK.xcframework/ios-arm64/libMoltenVK.a"
 
-          ls -lah \
-            "$VULKAN_SDK/lib/MoltenVK.xcframework/ios-arm64/"
+          ls -lah "$VULKAN_SDK/lib/MoltenVK.xcframework/ios-arm64/"
 
-      # Dynamic MoltenVK.framework for the final iPhone app
       - name: Fetch runtime MoltenVK
         run: |
           chmod +x ./scripts/build/ios/fetch-moltenvk.sh
@@ -104,10 +100,6 @@ jobs:
 
       - name: Upload compiled files
         if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: generals-ios-build
-          path: build/ios-vulkan
         uses: actions/upload-artifact@v4
         with:
           name: generals-ios-build
