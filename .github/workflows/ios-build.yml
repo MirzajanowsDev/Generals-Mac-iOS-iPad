@@ -31,7 +31,13 @@ jobs:
         run: |
           chmod +x ./scripts/build/ios/fetch-moltenvk.sh
           ./scripts/build/ios/fetch-moltenvk.sh
+      - name: Find MoltenVK
+        run: |
+          echo "=== MoltenVK directories ==="
+          find . -iname "*MoltenVK*" -print
 
+          echo "=== libMoltenVK.a ==="
+          find . -name "libMoltenVK.a" -print
       - name: Stage fonts
         run: |
           chmod +x ./scripts/build/ios/stage-fonts.sh
