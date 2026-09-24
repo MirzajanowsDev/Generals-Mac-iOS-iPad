@@ -1,4 +1,4 @@
-name: Build Generals iOS
+name: Build iPhone Generals
 
 on:
   workflow_dispatch:
@@ -40,9 +40,6 @@ jobs:
           meson --version
 
           echo "=== glslang ==="
-          echo "GLSLANG_PREFIX=$GLSLANG_PREFIX"
-          ls -lah "$GLSLANG_PREFIX/bin"
-
           test -x "$GLSLANG_PREFIX/bin/glslangValidator"
           "$GLSLANG_PREFIX/bin/glslangValidator" --version
 
@@ -60,12 +57,9 @@ jobs:
         run: |
           export PATH="$GLSLANG_BIN:/opt/homebrew/bin:/usr/local/bin:$PATH"
 
-          echo "PATH=$PATH"
-
           which glslangValidator
           glslangValidator --version
 
-          which glslang || true
           which spirv-as || true
           which spirv-dis || true
 
@@ -81,7 +75,10 @@ jobs:
 
       - name: Initialize DXVK submodule
         run: |
-          git submodule update --init --recursive references/fbraz3-dxvk
+          git submodule update \
+            --init \
+            --recursive \
+            references/fbraz3-dxvk
 
       - name: Build MoltenVK for iOS
         run: |
@@ -89,7 +86,8 @@ jobs:
 
           rm -rf MoltenVK
 
-          git clone --depth 1 \
+          git clone \
+            --depth 1 \
             https://github.com/KhronosGroup/MoltenVK.git \
             MoltenVK
 
@@ -119,11 +117,6 @@ jobs:
 
           if [ -z "$MOLTENVK_LIB" ]; then
             echo "ERROR: libMoltenVK.a not found"
-
-            find "$RUNNER_TEMP/MoltenVK" \
-              -iname "*MoltenVK*" \
-              -print || true
-
             exit 1
           fi
 
@@ -159,12 +152,9 @@ jobs:
         run: |
           export PATH="$GLSLANG_BIN:/opt/homebrew/bin:/usr/local/bin:$PATH"
 
-          echo "=== Configure environment ==="
           echo "VULKAN_SDK=$VULKAN_SDK"
           echo "VCPKG_ROOT=$VCPKG_ROOT"
-          echo "PATH=$PATH"
 
-          echo "=== Shader compiler ==="
           which glslangValidator
           glslangValidator --version
 
@@ -176,42 +166,79 @@ jobs:
         run: |
           export PATH="$GLSLANG_BIN:/opt/homebrew/bin:/usr/local/bin:$PATH"
 
-          echo "=== Build environment ==="
           which glslangValidator
-          glslangValidator --version
 
           cmake --build build/ios-vulkan \
             --target z_generals \
             --parallel 3
 
-      - name: Find generated application
-        if: always()
+      - name: Verify generated application
         run: |
-          echo "=== iOS app bundles ==="
+          APP_PATH="build/ios-vulkan/GeneralsMD/GeneralsXZH.app"
 
-          find build \
-            -type d \
-            -name "*.app" \
-            -print || true
+          if [ ! -d "$APP_PATH" ]; then
+            echo "ERROR: GeneralsXZH.app not found"
+            find build -type d -name "*.app" -print || true
+            exit 1
+          fi
 
-          echo "=== GeneralsXZH executable ==="
+          echo "=== GeneralsXZH.app found ==="
+          du -sh "$APP_PATH"
 
-          find build \
-            -type f \
-            -name "GeneralsXZH" \
-            -print || true
+          echo "=== App contents ==="
+          ls -lah "$APP_PATH"
 
-          echo "=== GeneralsMD ==="
+      - name: Create unsigned IPA
+        run: |
+          APP_PATH="$GITHUB_WORKSPACE/build/ios-vulkan/GeneralsMD/GeneralsXZH.app"
+          IPA_DIR="$RUNNER_TEMP/ipa"
 
-          ls -lah \
-            build/ios-vulkan/GeneralsMD/ \
-            || true
+          rm -rf "$IPA_DIR"
+          mkdir -p "$IPA_DIR/Payload"
+
+          cp -R "$APP_PATH" \
+            "$IPA_DIR/Payload/GeneralsXZH.app"
+
+          cd "$IPA_DIR"
+
+          ditto \
+            -c \
+            -k \
+            --sequesterRsrc \
+            --keepParent \
+            Payload \
+            "$GITHUB_WORKSPACE/GeneralsXZH-unsigned.ipa"
+
+          echo "=== IPA created ==="
+          ls -lh "$GITHUB_WORKSPACE/GeneralsXZH-unsigned.ipa"
+
+      - name: Verify IPA
+        run: |
+          echo "=== IPA contents ==="
+
+          unzip -l GeneralsXZH-unsigned.ipa | head -100
+
+          if unzip -l GeneralsXZH-unsigned.ipa \
+            | grep -q "Payload/GeneralsXZH.app/"; then
+
+            echo "IPA structure OK"
+          else
+            echo "ERROR: Invalid IPA structure"
+            exit 1
+          fi
 
       - name: Upload iOS app
-        if: success()
         uses: actions/upload-artifact@v7
         with:
-          name: GeneralsXZH-iOS
+          name: GeneralsXZH-app
           path: build/ios-vulkan/GeneralsMD/GeneralsXZH.app
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v7
+        with:
+          name: GeneralsXZH-unsigned-IPA
+          path: GeneralsXZH-unsigned.ipa
           retention-days: 7
           if-no-files-found: error
