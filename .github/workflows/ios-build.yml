@@ -27,44 +27,55 @@ jobs:
         run: |
           git submodule update --init references/fbraz3-dxvk
 
-      - name: Fetch MoltenVK
+      # Static MoltenVK for compiling/linking
+      - name: Download Vulkan SDK
         run: |
-          chmod +x ./scripts/build/ios/fetch-moltenvk.sh
-          ./scripts/build/ios/fetch-moltenvk.sh
+          mkdir -p "$HOME/VulkanSDK"
 
-      - name: Detect MoltenVK and set VULKAN_SDK
+          curl -L \
+            -o /tmp/vulkansdk.zip \
+            https://sdk.lunarg.com/sdk/download/latest/mac/vulkan-sdk.zip
+
+          unzip -q /tmp/vulkansdk.zip -d "$HOME/VulkanSDK"
+
+          echo "=== Vulkan SDK contents ==="
+          find "$HOME/VulkanSDK" -name "libMoltenVK.a" -print
+
+      - name: Detect Vulkan SDK
         run: |
-          echo "Searching for libMoltenVK.a..."
-
-          MOLTENVK_LIB=$(find . -path "*/MoltenVK.xcframework/ios-arm64/libMoltenVK.a" | head -n 1)
+          MOLTENVK_LIB=$(find "$HOME/VulkanSDK" \
+            -path "*/lib/MoltenVK.xcframework/ios-arm64/libMoltenVK.a" \
+            | head -n 1)
 
           if [ -z "$MOLTENVK_LIB" ]; then
-            echo "ERROR: libMoltenVK.a not found"
-            echo "MoltenVK-related files:"
-            find . -iname "*MoltenVK*" -print
+            echo "ERROR: Static libMoltenVK.a not found"
+            find "$HOME/VulkanSDK" -iname "*MoltenVK*" -print
             exit 1
           fi
 
-          echo "Found MoltenVK library:"
+          echo "Found:"
           echo "$MOLTENVK_LIB"
 
-          MOLTENVK_XCFRAMEWORK_DIR=$(dirname "$(dirname "$MOLTENVK_LIB")")
-          VULKAN_SDK_DIR=$(dirname "$MOLTENVK_XCFRAMEWORK_DIR")
+          SDK_ROOT="${MOLTENVK_LIB%/lib/MoltenVK.xcframework/ios-arm64/libMoltenVK.a}"
 
-          echo "Detected VULKAN_SDK:"
-          echo "$VULKAN_SDK_DIR"
+          echo "VULKAN_SDK=$SDK_ROOT"
+          echo "VULKAN_SDK=$SDK_ROOT" >> "$GITHUB_ENV"
 
-          echo "VULKAN_SDK=$VULKAN_SDK_DIR" >> "$GITHUB_ENV"
-
-      - name: Verify MoltenVK
+      - name: Verify Vulkan SDK
         run: |
           echo "VULKAN_SDK=$VULKAN_SDK"
 
-          echo "Checking expected MoltenVK path:"
-          ls -la "$VULKAN_SDK/lib/MoltenVK.xcframework/ios-arm64/" || true
+          test -f \
+            "$VULKAN_SDK/lib/MoltenVK.xcframework/ios-arm64/libMoltenVK.a"
 
-          echo "All libMoltenVK.a files:"
-          find . -name "libMoltenVK.a" -print
+          ls -lah \
+            "$VULKAN_SDK/lib/MoltenVK.xcframework/ios-arm64/"
+
+      # Dynamic MoltenVK.framework for the final iPhone app
+      - name: Fetch runtime MoltenVK
+        run: |
+          chmod +x ./scripts/build/ios/fetch-moltenvk.sh
+          ./scripts/build/ios/fetch-moltenvk.sh
 
       - name: Stage fonts
         run: |
@@ -85,11 +96,18 @@ jobs:
       - name: Find generated app
         if: always()
         run: |
-          echo "Generated .app folders:"
+          echo "=== Generated apps ==="
           find build -name "*.app" -print || true
+
+          echo "=== Generals binaries ==="
+          find build -name "GeneralsXZH" -print || true
 
       - name: Upload compiled files
         if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: generals-ios-build
+          path: build/ios-vulkan
         uses: actions/upload-artifact@v4
         with:
           name: generals-ios-build
