@@ -1,0 +1,52 @@
+name: Build Generals iOS
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          brew install cmake ninja meson pkgconf xcodegen
+
+      - name: Install vcpkg
+        run: |
+          git clone https://github.com/microsoft/vcpkg ~/vcpkg
+          ~/vcpkg/bootstrap-vcpkg.sh
+          echo "VCPKG_ROOT=$HOME/vcpkg" >> $GITHUB_ENV
+
+      - name: Initialize DXVK submodule
+        run: |
+          git submodule update --init references/fbraz3-dxvk
+
+      - name: Fetch MoltenVK
+        run: |
+          chmod +x ./scripts/build/ios/fetch-moltenvk.sh
+          ./scripts/build/ios/fetch-moltenvk.sh
+
+      - name: Stage fonts
+        run: |
+          chmod +x ./scripts/build/ios/stage-fonts.sh
+          ./scripts/build/ios/stage-fonts.sh
+
+      - name: Configure iOS build
+        run: |
+          cmake --preset ios-vulkan
+
+      - name: Build Generals
+        run: |
+          cmake --build build/ios-vulkan --target z_generals --parallel 3
+
+      - name: Upload compiled files
+        uses: actions/upload-artifact@v4
+        with:
+          name: generals-ios-build
+          path: build/ios-vulkan
