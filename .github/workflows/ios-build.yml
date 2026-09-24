@@ -172,73 +172,221 @@ jobs:
             --target z_generals \
             --parallel 3
 
-      - name: Verify generated application
+      - name: Generate Xcode iOS wrapper
         run: |
-          APP_PATH="build/ios-vulkan/GeneralsMD/GeneralsXZH.app"
+          cd ios
 
-          if [ ! -d "$APP_PATH" ]; then
-            echo "ERROR: GeneralsXZH.app not found"
-            find build -type d -name "*.app" -print || true
+          xcodegen generate
+
+          xcodebuild \
+            -project GeneralsXZH.xcodeproj \
+            -scheme GeneralsXZH \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$GITHUB_WORKSPACE/ios/build" \
+            PRODUCT_BUNDLE_IDENTIFIER="com.mirzajanows.generalsxzh" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Assemble final iPhone app
+        run: |
+          set -e
+
+          ENGINE_APP="$GITHUB_WORKSPACE/build/ios-vulkan/GeneralsMD/GeneralsXZH.app"
+          ENGINE="$ENGINE_APP/GeneralsXZH"
+
+          SHELL_APP="$GITHUB_WORKSPACE/ios/build/Build/Products/Release-iphoneos/GeneralsXZH.app"
+
+          FINAL_DIR="$GITHUB_WORKSPACE/build/ios-package"
+          FINAL_APP="$FINAL_DIR/GeneralsXZH.app"
+
+          DXVK="$GITHUB_WORKSPACE/build/ios-vulkan/_deps/dxvk-build-macos"
+          BUILD="$GITHUB_WORKSPACE/build/ios-vulkan"
+
+          echo "=== Checking required files ==="
+
+          test -f "$ENGINE"
+          test -d "$SHELL_APP"
+
+          rm -rf "$FINAL_DIR"
+          mkdir -p "$FINAL_DIR"
+
+          cp -R "$SHELL_APP" "$FINAL_APP"
+
+          echo "=== Installing real Generals executable ==="
+
+          rm -f "$FINAL_APP/GeneralsXZH"
+          cp "$ENGINE" "$FINAL_APP/GeneralsXZH"
+          chmod +x "$FINAL_APP/GeneralsXZH"
+
+          mkdir -p "$FINAL_APP/Frameworks"
+
+          echo "=== Adding DXVK ==="
+
+          cp \
+            "$DXVK/src/d3d8/libdxvk_d3d8.0.dylib" \
+            "$FINAL_APP/Frameworks/"
+
+          cp \
+            "$DXVK/src/d3d9/libdxvk_d3d9.0.dylib" \
+            "$FINAL_APP/Frameworks/"
+
+          echo "=== Adding SDL ==="
+
+          cp \
+            "$BUILD/_deps/sdl3-build/libSDL3.0.dylib" \
+            "$FINAL_APP/Frameworks/"
+
+          cp \
+            "$BUILD/_deps/sdl3_image-build/libSDL3_image.0.dylib" \
+            "$FINAL_APP/Frameworks/"
+
+          echo "=== Adding OpenAL ==="
+
+          OPENAL="$(find "$BUILD/_deps/openal_soft-build" \
+            -type f \
+            -name 'libopenal*.dylib' \
+            | head -n 1)"
+
+          if [ -z "$OPENAL" ]; then
+            echo "ERROR: OpenAL dylib not found"
             exit 1
           fi
 
-          echo "=== GeneralsXZH.app found ==="
-          du -sh "$APP_PATH"
+          cp "$OPENAL" \
+            "$FINAL_APP/Frameworks/libopenal.1.dylib"
 
-          echo "=== App contents ==="
-          ls -lah "$APP_PATH"
+          echo "=== Adding optional GameSpy ==="
 
-      - name: Create unsigned IPA
-        run: |
-          APP_PATH="$GITHUB_WORKSPACE/build/ios-vulkan/GeneralsMD/GeneralsXZH.app"
-          IPA_DIR="$RUNNER_TEMP/ipa"
+          if [ -f "$BUILD/libgamespy.dylib" ]; then
+            cp "$BUILD/libgamespy.dylib" \
+              "$FINAL_APP/Frameworks/"
+          fi
 
-          rm -rf "$IPA_DIR"
-          mkdir -p "$IPA_DIR/Payload"
+          echo "=== Adding MoltenVK.framework ==="
 
-          cp -R "$APP_PATH" \
-            "$IPA_DIR/Payload/GeneralsXZH.app"
+          MVK="$HOME/GeneralsX/MoltenVK/MoltenVK/MoltenVK/dynamic/MoltenVK.xcframework/ios-arm64/MoltenVK.framework"
 
-          cd "$IPA_DIR"
-
-          ditto \
-            -c \
-            -k \
-            --sequesterRsrc \
-            --keepParent \
-            Payload \
-            "$GITHUB_WORKSPACE/GeneralsXZH-unsigned.ipa"
-
-          echo "=== IPA created ==="
-          ls -lh "$GITHUB_WORKSPACE/GeneralsXZH-unsigned.ipa"
-
-      - name: Verify IPA
-        run: |
-          echo "=== IPA contents ==="
-
-          unzip -l GeneralsXZH-unsigned.ipa | head -100
-
-          if unzip -l GeneralsXZH-unsigned.ipa \
-            | grep -q "Payload/GeneralsXZH.app/"; then
-
-            echo "IPA structure OK"
-          else
-            echo "ERROR: Invalid IPA structure"
+          if [ ! -d "$MVK" ]; then
+            echo "ERROR: MoltenVK.framework not found"
+            find "$HOME/GeneralsX" -name "MoltenVK.framework" -print || true
             exit 1
           fi
 
-      - name: Upload iOS app
-        uses: actions/upload-artifact@v7
-        with:
-          name: GeneralsXZH-app
-          path: build/ios-vulkan/GeneralsMD/GeneralsXZH.app
-          retention-days: 7
-          if-no-files-found: error
+          cp -R "$MVK" \
+            "$FINAL_APP/Frameworks/"
 
-      - name: Upload unsigned IPA
+          echo "=== Adding rpath ==="
+
+          install_name_tool \
+            -add_rpath "@executable_path/Frameworks" \
+            "$FINAL_APP/GeneralsXZH" \
+            2>/dev/null || true
+
+      - name: Add fonts and default configuration
+        run: |
+          FINAL_APP="$GITHUB_WORKSPACE/build/ios-package/GeneralsXZH.app"
+
+          mkdir -p "$FINAL_APP/GameData/fonts"
+
+          FONT_DIR="$HOME/GeneralsX/ios-staging/fonts"
+
+          if [ -d "$FONT_DIR" ]; then
+            cp "$FONT_DIR"/*.ttf \
+              "$FINAL_APP/GameData/fonts/" || true
+          fi
+
+          cp ios/config/dxvk.conf \
+            "$FINAL_APP/GameData/dxvk.conf"
+
+          cp ios/config/Options.ini \
+            "$FINAL_APP/GameData/DefaultOptions.ini"
+
+      - name: Validate final iOS application
+        run: |
+          APP="$GITHUB_WORKSPACE/build/ios-package/GeneralsXZH.app"
+
+          echo "=== Info.plist ==="
+          plutil -p "$APP/Info.plist"
+
+          echo "=== Bundle ID ==="
+          /usr/libexec/PlistBuddy \
+            -c "Print :CFBundleIdentifier" \
+            "$APP/Info.plist"
+
+          echo "=== Executable ==="
+          file "$APP/GeneralsXZH"
+
+          echo "=== Frameworks ==="
+          ls -lah "$APP/Frameworks"
+
+          echo "=== Bundle ==="
+          find "$APP" -maxdepth 2 -type f -print
+
+      - name: Remove temporary code signatures
+        run: |
+          APP="$GITHUB_WORKSPACE/build/ios-package/GeneralsXZH.app"
+
+          rm -rf "$APP/_CodeSignature"
+          rm -f "$APP/embedded.mobileprovision"
+
+          find "$APP/Frameworks" \
+            -name "_CodeSignature" \
+            -type d \
+            -prune \
+            -exec rm -rf {} + 2>/dev/null || true
+
+      - name: Create sideload IPA
+        run: |
+          PACKAGE="$RUNNER_TEMP/GeneralsXZH-package"
+
+          rm -rf "$PACKAGE"
+
+          mkdir -p "$PACKAGE/Payload"
+
+          cp -R \
+            "$GITHUB_WORKSPACE/build/ios-package/GeneralsXZH.app" \
+            "$PACKAGE/Payload/GeneralsXZH.app"
+
+          cd "$PACKAGE"
+
+          zip -qry \
+            "$GITHUB_WORKSPACE/GeneralsXZH-Sideload.ipa" \
+            Payload
+
+          echo "=== IPA ==="
+
+          ls -lh \
+            "$GITHUB_WORKSPACE/GeneralsXZH-Sideload.ipa"
+
+      - name: Verify IPA structure
+        run: |
+          unzip -l GeneralsXZH-Sideload.ipa | head -100
+
+          unzip -p \
+            GeneralsXZH-Sideload.ipa \
+            Payload/GeneralsXZH.app/Info.plist \
+            > /tmp/GeneralsInfo.plist
+
+          plutil -p /tmp/GeneralsInfo.plist
+
+          echo "=== Package type ==="
+          /usr/libexec/PlistBuddy \
+            -c "Print :CFBundlePackageType" \
+            /tmp/GeneralsInfo.plist
+
+          echo "=== Bundle ID ==="
+          /usr/libexec/PlistBuddy \
+            -c "Print :CFBundleIdentifier" \
+            /tmp/GeneralsInfo.plist
+
+      - name: Upload Sideload IPA
         uses: actions/upload-artifact@v7
         with:
-          name: GeneralsXZH-unsigned-IPA
-          path: GeneralsXZH-unsigned.ipa
+          name: GeneralsXZH-Sideload-IPA
+          path: GeneralsXZH-Sideload.ipa
           retention-days: 7
           if-no-files-found: error
