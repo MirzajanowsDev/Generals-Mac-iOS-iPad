@@ -286,24 +286,21 @@ jobs:
             "$FINAL_APP/GeneralsXZH" \
             2>/dev/null || true
 
-      - name: Add fonts and default configuration
+      - name: Prepare Documents mode
         run: |
           FINAL_APP="$GITHUB_WORKSPACE/build/ios-package/GeneralsXZH.app"
 
-          mkdir -p "$FINAL_APP/GameData/fonts"
+          echo "=== Removing bundled GameData ==="
 
-          FONT_DIR="$HOME/GeneralsX/ios-staging/fonts"
+          rm -rf "$FINAL_APP/GameData"
 
-          if [ -d "$FONT_DIR" ]; then
-            cp "$FONT_DIR"/*.ttf \
-              "$FINAL_APP/GameData/fonts/" || true
+          if [ -d "$FINAL_APP/GameData" ]; then
+            echo "ERROR: GameData still exists"
+            exit 1
           fi
 
-          cp ios/config/dxvk.conf \
-            "$FINAL_APP/GameData/dxvk.conf"
-
-          cp ios/config/Options.ini \
-            "$FINAL_APP/GameData/DefaultOptions.ini"
+          echo "GameData removed successfully."
+          echo "Generals will use the iOS Documents folder for game assets."
 
       - name: Validate final iOS application
         run: |
