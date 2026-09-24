@@ -21,7 +21,7 @@ jobs:
         run: |
           git clone https://github.com/microsoft/vcpkg ~/vcpkg
           ~/vcpkg/bootstrap-vcpkg.sh
-          echo "VCPKG_ROOT=$HOME/vcpkg" >> $GITHUB_ENV
+          echo "VCPKG_ROOT=$HOME/vcpkg" >> "$GITHUB_ENV"
 
       - name: Initialize DXVK submodule
         run: |
@@ -31,13 +31,41 @@ jobs:
         run: |
           chmod +x ./scripts/build/ios/fetch-moltenvk.sh
           ./scripts/build/ios/fetch-moltenvk.sh
-      - name: Find MoltenVK
-        run: |
-          echo "=== MoltenVK directories ==="
-          find . -iname "*MoltenVK*" -print
 
-          echo "=== libMoltenVK.a ==="
+      - name: Detect MoltenVK and set VULKAN_SDK
+        run: |
+          echo "Searching for libMoltenVK.a..."
+
+          MOLTENVK_LIB=$(find . -path "*/MoltenVK.xcframework/ios-arm64/libMoltenVK.a" | head -n 1)
+
+          if [ -z "$MOLTENVK_LIB" ]; then
+            echo "ERROR: libMoltenVK.a not found"
+            echo "MoltenVK-related files:"
+            find . -iname "*MoltenVK*" -print
+            exit 1
+          fi
+
+          echo "Found MoltenVK library:"
+          echo "$MOLTENVK_LIB"
+
+          MOLTENVK_XCFRAMEWORK_DIR=$(dirname "$(dirname "$MOLTENVK_LIB")")
+          VULKAN_SDK_DIR=$(dirname "$MOLTENVK_XCFRAMEWORK_DIR")
+
+          echo "Detected VULKAN_SDK:"
+          echo "$VULKAN_SDK_DIR"
+
+          echo "VULKAN_SDK=$VULKAN_SDK_DIR" >> "$GITHUB_ENV"
+
+      - name: Verify MoltenVK
+        run: |
+          echo "VULKAN_SDK=$VULKAN_SDK"
+
+          echo "Checking expected MoltenVK path:"
+          ls -la "$VULKAN_SDK/lib/MoltenVK.xcframework/ios-arm64/" || true
+
+          echo "All libMoltenVK.a files:"
           find . -name "libMoltenVK.a" -print
+
       - name: Stage fonts
         run: |
           chmod +x ./scripts/build/ios/stage-fonts.sh
@@ -45,13 +73,23 @@ jobs:
 
       - name: Configure iOS build
         run: |
+          echo "Using VULKAN_SDK=$VULKAN_SDK"
           cmake --preset ios-vulkan
 
       - name: Build Generals
         run: |
-          cmake --build build/ios-vulkan --target z_generals --parallel 3
+          cmake --build build/ios-vulkan \
+            --target z_generals \
+            --parallel 3
+
+      - name: Find generated app
+        if: always()
+        run: |
+          echo "Generated .app folders:"
+          find build -name "*.app" -print || true
 
       - name: Upload compiled files
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: generals-ios-build
