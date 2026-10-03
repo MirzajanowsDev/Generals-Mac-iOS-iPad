@@ -37,6 +37,7 @@
 #include "GameClient/MapUtil.h"
 #include "Common/UserPreferences.h"
 #include "GameLogic/GameLogic.h"
+#include "Platform/AndroidLAN.h"
 
 
 static const UnsignedShort lobbyPort = 8086; ///< This is the UDP port used by all LANAPI communication
@@ -100,8 +101,8 @@ void LANAPI::init()
 	m_gameStartTime = 0;
 	m_gameStartSeconds = 0;
 	m_transport->reset();
-	m_transport->init(m_localIP, lobbyPort);
-	m_transport->allowBroadcasts(true);
+	// GeneralsX @bugfix Codex 04/10/2026 Use the same LAN address/broadcast selection on startup and lobby entry.
+	SetLocalIP(m_localIP);
 
 	m_pendingAction = ACT_NONE;
 	m_expiration = 0;
@@ -200,7 +201,15 @@ void LANAPI::sendMessage(LANMessage *msg, UnsignedInt ip /* = 0 */)
 	}
 	else
 	{
-		m_transport->queueSend(m_broadcastAddr, lobbyPort, (unsigned char *)msg, sizeof(LANMessage) /*, 0, 0 */);
+		// GeneralsX @bugfix Codex 04/10/2026 Record directed broadcast discovery in release logcat.
+		Bool queued = m_transport->queueSend(m_broadcastAddr, lobbyPort, (unsigned char *)msg, sizeof(LANMessage) /*, 0, 0 */);
+#ifdef __ANDROID__
+		__android_log_print(ANDROID_LOG_DEBUG, "GeneralsLAN",
+			"LAN broadcast type=%u destination=%d.%d.%d.%d:%u queued=%d",
+			msg->messageType, PRINTF_IP_AS_4_INTS(m_broadcastAddr), lobbyPort, queued);
+#else
+		(void)queued;
+#endif
 	}
 }
 
@@ -346,6 +355,12 @@ void LANAPI::update()
 	{
 		if (m_transport->m_inBuffer[i].length > 0)
 		{
+			// GeneralsX @bugfix Codex 04/10/2026 Reject truncated or unrelated messages before reading LAN fields.
+			if (m_transport->m_inBuffer[i].length != sizeof(LANMessage))
+			{
+				m_transport->m_inBuffer[i].length = 0;
+				continue;
+			}
 			// Process the new message
 			UnsignedInt senderIP = m_transport->m_inBuffer[i].addr;
 			if (senderIP == m_localIP)
@@ -355,6 +370,10 @@ void LANAPI::update()
 			}
 
 			LANMessage *msg = (LANMessage *)(m_transport->m_inBuffer[i].data);
+#ifdef __ANDROID__
+			__android_log_print(ANDROID_LOG_DEBUG, "GeneralsLAN", "LAN packet type=%u source=%d.%d.%d.%d:%u",
+				msg->messageType, PRINTF_IP_AS_4_INTS(senderIP), m_transport->m_inBuffer[i].port);
+#endif
 			//DEBUG_LOG(("LAN message type %s from %ls (%s@%s)", GetMessageTypeString(msg->messageType).str(),
 			//	msg->name, msg->userName, msg->hostName));
 			switch (msg->messageType)
@@ -1272,11 +1291,31 @@ void LANAPI::addPlayer( LANPlayer *player )
 Bool LANAPI::SetLocalIP( UnsignedInt localIP )
 {
 	Bool retval = TRUE;
+#ifdef __ANDROID__
+	// GeneralsX @bugfix Codex 04/10/2026 Ignore stale cellular preferences and use the real Wi-Fi/SoftAP subnet.
+	GeneralsLAN::IPv4Interface iface;
+	if (!GeneralsLAN::selectInterface(iface))
+	{
+		m_transport->reset();
+		m_localIP = 0;
+		m_broadcastAddr = 0;
+		return FALSE;
+	}
+	localIP = iface.ip;
+	m_broadcastAddr = iface.broadcast;
+#endif
 	m_localIP = localIP;
 
 	m_transport->reset();
+#ifdef __ANDROID__
+	retval = m_transport->init(m_localIP, lobbyPort, true);
+#else
 	retval = m_transport->init(m_localIP, lobbyPort);
-	m_transport->allowBroadcasts(true);
+#endif
+	if (retval)
+		retval = m_transport->allowBroadcasts(true);
+	if (!retval)
+		m_transport->reset();
 
 	return retval;
 }

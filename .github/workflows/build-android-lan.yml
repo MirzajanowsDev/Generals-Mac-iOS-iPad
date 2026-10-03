@@ -1,0 +1,57 @@
+# GeneralsX @build Codex 04/10/2026 Build and validate the Android hotspot LAN release.
+name: Android LAN release
+
+on:
+  push:
+    branches: ['fix/android-hotspot-lan-*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Initialize Android DXVK fork
+        run: git submodule update --init references/fbraz3-dxvk
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - name: Install native build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build pkg-config python3-pip
+          python3 -m pip install --user --break-system-packages meson==1.7.2
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'ndk;27.1.12297006' 'cmake;3.30.5'
+      - name: LAN regression checks
+        run: |
+          mkdir -p build/lan-check
+          g++ -std=c++17 -Wall -Wextra -Werror -ICore/Libraries/Source scripts/qa/lan/lan-ipv4-test.cpp -o build/lan-check/policy
+          build/lan-check/policy
+          g++ -std=c++17 -Wall -Wextra -Werror -D__ANDROID__ -Iscripts/qa/lan -ICore/Libraries/Source scripts/qa/lan/lan-socket-test.cpp -o build/lan-check/socket
+          build/lan-check/socket
+      - name: Build native engine and verified release APK
+        run: bash scripts/build/android/build-release-ci.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GeneralsZH-Android-LAN-release
+          path: |
+            release/GeneralsZH-LAN-release.apk
+            release/SHA256SUMS
+            release/apk-verification.txt
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Android-LAN-build-logs
+          path: logs/android-ci-*.log
+          if-no-files-found: ignore

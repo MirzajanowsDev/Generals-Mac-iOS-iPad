@@ -25,6 +25,8 @@
     <!-- LAN multiplayer (mirrors NSLocalNetworkUsageDescription on iOS). -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- GeneralsX @bugfix Codex 04/10/2026 Wi-Fi state and foreground multicast reception for LAN discovery. -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
 
     <application

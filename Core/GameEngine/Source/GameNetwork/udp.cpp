@@ -34,6 +34,7 @@
 #include "Common/GameEngine.h"
 //#include "GameNetwork/NetworkInterface.h"
 #include "GameNetwork/udp.h"
+#include "Platform/AndroidLAN.h"
 
 
 //-------------------------------------------------------------------------
@@ -116,12 +117,18 @@ AsciiString GetWSAErrorString( Int error )
 
 UDP::UDP()
 {
-  fd=0;
+  // GeneralsX @bugfix Codex 04/10/2026 Initialize descriptor, address and saved socket error state.
+  fd=-1;
+  myIP=0;
+  myPort=0;
+  m_lastError=0;
+  m_lanInterfaceIndex=0;
+  memset(&addr,0,sizeof(addr));
 }
 
 UDP::~UDP()
 {
-	if (fd)
+	if (fd != -1)
 		closesocket(fd);
 }
 
@@ -135,31 +142,60 @@ Int UDP::Bind(const char *Host,UnsignedShort port)
 
   hostStruct = gethostbyname(Host);
   if (hostStruct == nullptr)
-    return (0);
+    return (ADDRNOTAVAIL);
   hostNode = (struct in_addr *) hostStruct->h_addr;
   return ( Bind(ntohl(hostNode->s_addr),port) );
 }
 
 // You must call bind, implicit binding is for sissies
 //   Well... you can get implicit binding if you pass 0 for either arg
-Int UDP::Bind(UnsignedInt IP,UnsignedShort Port)
+Int UDP::Bind(UnsignedInt IP,UnsignedShort Port, Bool lanDiscovery)
 {
   int retval;
   int status;
 
-  IP=htonl(IP);
-  Port=htons(Port);
+  // GeneralsX @bugfix Codex 04/10/2026 Close failed bind attempts and preserve host-order local endpoint.
+  if (fd != -1)
+    closesocket(fd);
+  fd=-1;
+  m_lanInterfaceIndex=0;
+  ClearStatus();
+  myIP=IP;
+  myPort=Port;
+  memset(&addr,0,sizeof(addr));
 
   addr.sin_family=AF_INET;
-  addr.sin_port=Port;
-  addr.sin_addr.s_addr=IP;
+  addr.sin_port=htons(Port);
+  addr.sin_addr.s_addr=htonl(IP);
   fd=socket(AF_INET,SOCK_DGRAM,DEFAULT_PROTOCOL);
   #ifdef _WIN32
   if (fd==SOCKET_ERROR)
     fd=-1;
   #endif
   if (fd==-1)
+  {
+    m_lastError=WSAGetLastError();
     return(UNKNOWN);
+  }
+
+#ifdef __ANDROID__
+  // GeneralsX @bugfix Codex 04/10/2026 A unicast bind misses subnet broadcasts on Linux/Android.
+  // IP_PKTINFO keeps outgoing traffic and incoming discovery on the chosen LAN, even when cellular is default.
+  if (lanDiscovery)
+  {
+    if (GeneralsLAN::configureDiscoverySocket(fd, IP, m_lanInterfaceIndex) < 0)
+    {
+      m_lastError=errno;
+      __android_log_print(ANDROID_LOG_ERROR, "GeneralsLAN", "Discovery socket setup failed: %s", strerror(m_lastError));
+      closesocket(fd);
+      fd=-1;
+      return(UNKNOWN);
+    }
+    addr.sin_addr.s_addr=htonl(INADDR_ANY);
+  }
+#else
+  (void)lanDiscovery;
+#endif
 
   retval=bind(fd,(struct sockaddr *)&addr,sizeof(addr));
 
@@ -172,16 +208,28 @@ Int UDP::Bind(UnsignedInt IP,UnsignedShort Port)
   #endif
   if (retval==-1)
   {
+    m_lastError=WSAGetLastError();
+#ifdef __ANDROID__
+    __android_log_print(ANDROID_LOG_ERROR, "GeneralsLAN", "UDP bind failed IP=%08x port=%u: %s", IP, Port, strerror(m_lastError));
+#endif
     status=GetStatus();
-    //CERR("Bind failure (" << status << ") IP " << IP << " PORT " << Port )
+    closesocket(fd);
+    fd=-1;
     return(status);
   }
 
-// GeneralsX @bugfix BenderAI 13/02/2026 Use socklen_t for POSIX socket functions (fighter19 pattern)
-socklen_t namelen=sizeof(addr);
   retval=SetBlocking(FALSE);
-  if (retval==-1)
-    fprintf(stderr,"Couldn't set nonblocking mode!\n");
+  if (retval != OK)
+  {
+    m_lastError=WSAGetLastError();
+    closesocket(fd);
+    fd=-1;
+    return(UNKNOWN);
+  }
+#ifdef __ANDROID__
+  if (lanDiscovery)
+    __android_log_print(ANDROID_LOG_INFO, "GeneralsLAN", "Discovery bound to 0.0.0.0:%u, egress interface index=%u", Port, m_lanInterfaceIndex);
+#endif
 
   return(OK);
 }
@@ -209,6 +257,9 @@ Int UDP::SetBlocking(Int block)
      return(OK);
   #else  // UNIX
    int flags = fcntl(fd, F_GETFL, 0);
+   // GeneralsX @bugfix Codex 04/10/2026 Do not reuse a failed F_GETFL result as descriptor flags.
+   if (flags < 0)
+     return(UNKNOWN);
    if (block==FALSE)          // set nonblocking
      flags |= O_NONBLOCK;
    else                       // set blocking
@@ -226,7 +277,7 @@ Int UDP::SetBlocking(Int block)
 Int UDP::Write(const unsigned char *msg,UnsignedInt len,UnsignedInt IP,UnsignedShort port)
 {
   Int retval;
-  struct sockaddr_in to;
+  struct sockaddr_in to = {};
 
   // This happens frequently
   if ((IP==0)||(port==0)) return(ADDRNOTAVAIL);
@@ -239,7 +290,21 @@ Int UDP::Write(const unsigned char *msg,UnsignedInt len,UnsignedInt IP,UnsignedS
   to.sin_family=AF_INET;
 
   ClearStatus();
-  retval=sendto(fd,(const char *)msg,len,0,(struct sockaddr *)&to,sizeof(to));
+#ifdef __ANDROID__
+  // GeneralsX @bugfix Codex 04/10/2026 Pin broadcast and unicast discovery packets to the selected LAN source.
+  if (m_lanInterfaceIndex)
+    retval=GeneralsLAN::sendDiscovery(fd, msg, len, to, myIP, m_lanInterfaceIndex);
+  else
+#endif
+    retval=sendto(fd,(const char *)msg,len,0,(struct sockaddr *)&to,sizeof(to));
+#ifndef _WIN32
+  if (retval < 0)
+    m_lastError=errno;
+#endif
+#ifdef __ANDROID__
+  if (retval < 0 && m_lanInterfaceIndex)
+    __android_log_print(ANDROID_LOG_WARN, "GeneralsLAN", "UDP discovery send failed destination=%08x:%u: %s", IP, port, strerror(m_lastError));
+#endif
   #ifdef _WIN32
   if (retval==SOCKET_ERROR)
 	{
@@ -260,6 +325,23 @@ Int UDP::Read(unsigned char *msg,UnsignedInt len,sockaddr_in *from)
   Int retval;
   // GeneralsX @bugfix BenderAI 13/02/2026 Use socklen_t for POSIX socket functions (fighter19 pattern)
   socklen_t alen=sizeof(sockaddr_in);
+
+#ifdef __ANDROID__
+  // GeneralsX @bugfix Codex 04/10/2026 Accept unicast and subnet broadcasts only from the selected LAN interface.
+  if (m_lanInterfaceIndex)
+  {
+    ClearStatus();
+    retval=GeneralsLAN::receiveDiscovery(fd, msg, len, from, m_lanInterfaceIndex);
+    if (retval < 0)
+    {
+      m_lastError=errno;
+      if (m_lastError == EAGAIN || m_lastError == EWOULDBLOCK)
+        return 0;
+      __android_log_print(ANDROID_LOG_WARN, "GeneralsLAN", "UDP discovery receive failed: %s", strerror(m_lastError));
+    }
+    return retval;
+  }
+#endif
 
   if (from!=nullptr)
   {
@@ -303,6 +385,15 @@ Int UDP::Read(unsigned char *msg,UnsignedInt len,sockaddr_in *from)
 		}
     #endif
   }
+  // GeneralsX @bugfix Codex 04/10/2026 POSIX would-block is an empty receive queue, not a transport failure.
+#ifndef _WIN32
+  if (retval < 0)
+  {
+    m_lastError=errno;
+    if (m_lastError == EAGAIN || m_lastError == EWOULDBLOCK)
+      return 0;
+  }
+#endif
   return(retval);
 }
 
@@ -360,6 +451,11 @@ UDP::sockStat UDP::GetStatus()
       return CONNREFUSED;
     case EINVAL:
       return INVAL;
+    // GeneralsX @bugfix Codex 04/10/2026 Propagate unavailable LAN addresses and occupied lobby ports.
+    case EADDRNOTAVAIL:
+      return ADDRNOTAVAIL;
+    case EADDRINUSE:
+      return ADDRINUSE;
     case EISCONN:
       return ISCONN;
     case ENOTSOCK:
@@ -377,6 +473,11 @@ UDP::sockStat UDP::GetStatus()
     #endif
     case EBADF:
       return BADF;
+    // GeneralsX @bugfix Codex 04/10/2026 Propagate POSIX bind/routing failures to the LAN error handler.
+    case EADDRINUSE:
+      return ADDRINUSE;
+    case EADDRNOTAVAIL:
+      return ADDRNOTAVAIL;
     default:
       return UNKNOWN;
   }

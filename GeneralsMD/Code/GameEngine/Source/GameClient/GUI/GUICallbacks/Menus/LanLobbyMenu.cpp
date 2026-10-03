@@ -429,14 +429,17 @@ void LanLobbyMenuInit( WindowLayout *layout, void *userData )
 			IPlist = IPlist->getNext();
 		}
 		*/
+#ifndef __ANDROID__
 		DEBUG_ASSERTCRASH(IPlist, ("No IP addresses found!"));
+#endif
 		if (!IPlist)
 		{
 			/// @todo: display error and exit lan lobby if no IPs are found
 		}
 
 		IPSource = L"Local IP chosen";
-		IP = IPlist->getIP();
+		// GeneralsX @bugfix Codex 04/10/2026 Let SetLocalIP report a missing LAN instead of dereferencing null.
+		IP = IPlist ? IPlist->getIP() : 0;
 	}
 	else
 	{

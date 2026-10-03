@@ -17,8 +17,43 @@
 package me.generalsx.zh;
 
 import org.libsdl.app.SDLActivity;
+import android.content.Context;
+import android.net.wifi.WifiManager;
+import android.util.Log;
 
 public class GameActivity extends SDLActivity {
+    // GeneralsX @bugfix Codex 04/10/2026 Keep Wi-Fi group traffic available while the game is visible.
+    private WifiManager.MulticastLock lanMulticastLock;
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        try {
+            WifiManager wifi = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+            if (wifi != null) {
+                if (lanMulticastLock == null) {
+                    lanMulticastLock = wifi.createMulticastLock("GeneralsLAN");
+                    lanMulticastLock.setReferenceCounted(false);
+                }
+                if (!lanMulticastLock.isHeld()) {
+                    lanMulticastLock.acquire();
+                    Log.i("GeneralsLAN", "Wi-Fi multicast lock acquired");
+                }
+            }
+        } catch (SecurityException error) {
+            Log.e("GeneralsLAN", "Cannot acquire Wi-Fi multicast lock", error);
+        }
+    }
+
+    @Override
+    protected void onStop() {
+        if (lanMulticastLock != null && lanMulticastLock.isHeld()) {
+            lanMulticastLock.release();
+            Log.i("GeneralsLAN", "Wi-Fi multicast lock released");
+        }
+        super.onStop();
+    }
+
     @Override
     protected String[] getLibraries() {
         // Order matters: the engine (libmain.so) dlopens libdxvk_d3d8.so, which

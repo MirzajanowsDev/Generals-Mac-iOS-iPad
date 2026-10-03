@@ -27,6 +27,7 @@
 #include "GameNetwork/IPEnumeration.h"
 #include "GameNetwork/networkutil.h"
 #include "GameClient/ClientInstance.h"
+#include "Platform/AndroidLAN.h"
 
 #ifndef _WIN32
 #include <errno.h>
@@ -90,7 +91,16 @@ EnumeratedIP * IPEnumeration::getAddresses()
 			(UnsignedByte)(id));
 	}
 
-#ifndef _WIN32
+#ifdef __ANDROID__
+	// GeneralsX @bugfix Codex 04/10/2026 Advertise only the active LAN/SoftAP address, never cellular or VPN.
+	GeneralsLAN::IPv4Interface iface;
+	if (GeneralsLAN::selectInterface(iface))
+	{
+		addNewIP((UnsignedByte)(iface.ip >> 24), (UnsignedByte)(iface.ip >> 16),
+			(UnsignedByte)(iface.ip >> 8), (UnsignedByte)iface.ip);
+	}
+	return m_IPlist;
+#elif !defined(_WIN32)
 	// GeneralsX @bugfix BenderAI 31/03/2026 Enumerate active IPv4 interfaces on non-Windows (POSIX) platforms instead of hostname resolution.
 	struct ifaddrs *ifaddr = nullptr;
 	if (getifaddrs(&ifaddr) == 0)
@@ -250,5 +260,4 @@ AsciiString IPEnumeration::getMachineName()
 
 	return AsciiString(hostname);
 }
-
 

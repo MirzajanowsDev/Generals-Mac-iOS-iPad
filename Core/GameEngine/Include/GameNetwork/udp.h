@@ -66,6 +66,8 @@ class UDP
   UnsignedInt       myIP;
   UnsignedShort       myPort;
   struct       sockaddr_in  addr;
+  // GeneralsX @bugfix Codex 04/10/2026 Preserve the selected interface while discovery listens on INADDR_ANY.
+  unsigned int m_lanInterfaceIndex;
 
  public:
   // These defines specify a system independent way to
@@ -101,7 +103,7 @@ class UDP
  public:
                    UDP();
                   ~UDP();
-  Int           Bind(UnsignedInt IP,UnsignedShort port);
+  Int           Bind(UnsignedInt IP,UnsignedShort port, Bool lanDiscovery = false);
   Int           Bind(const char *Host,UnsignedShort port);
   Int           Write(const unsigned char *msg,UnsignedInt len,UnsignedInt IP,UnsignedShort port);
   Int           Read(unsigned char *msg,UnsignedInt len,sockaddr_in *from);

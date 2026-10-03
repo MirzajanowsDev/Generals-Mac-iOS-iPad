@@ -46,7 +46,8 @@ public:
 	~Transport();
 
 	Bool init( AsciiString ip, UnsignedShort port );
-	Bool init( UnsignedInt ip, UnsignedShort port );
+	// GeneralsX @bugfix Codex 04/10/2026 LAN discovery needs broadcast reception and explicit Android egress.
+	Bool init( UnsignedInt ip, UnsignedShort port, Bool lanDiscovery = false );
 	void reset();
 	Bool update();									///< Call this once a GameEngine tick, regardless of whether the frame advances.
 

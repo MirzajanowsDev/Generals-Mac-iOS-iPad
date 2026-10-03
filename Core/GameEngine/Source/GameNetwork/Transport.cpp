@@ -71,6 +71,9 @@ Transport::Transport()
 {
 	m_winsockInit = false;
 	m_udpsock = nullptr;
+	// GeneralsX @bugfix Codex 04/10/2026 Initialize debug transport switches before the first discovery update.
+	m_useLatency = false;
+	m_usePacketLoss = false;
 }
 
 Transport::~Transport()
@@ -83,7 +86,8 @@ Bool Transport::init( AsciiString ip, UnsignedShort port )
 	return init(ResolveIP(ip), port);
 }
 
-Bool Transport::init( UnsignedInt ip, UnsignedShort port )
+// GeneralsX @bugfix Codex 04/10/2026 Pass discovery mode to UDP without changing gameplay socket bindings.
+Bool Transport::init( UnsignedInt ip, UnsignedShort port, Bool lanDiscovery )
 {
 	// ----- Initialize Winsock -----
 	if (!m_winsockInit)
@@ -113,11 +117,17 @@ Bool Transport::init( UnsignedInt ip, UnsignedShort port )
 	int retval = -1;
 	time_t now = timeGetTime();
 	while ((retval != 0) && ((timeGetTime() - now) < 1000)) {
-		retval = m_udpsock->Bind(ip, port);
+		retval = m_udpsock->Bind(ip, port, lanDiscovery);
+#ifdef __ANDROID__
+		// GeneralsX @bugfix Codex 04/10/2026 Avoid a one-second busy loop for unavailable LAN interfaces.
+		break;
+#endif
 	}
 
 	if (retval != 0) {
+#ifndef __ANDROID__
 		DEBUG_CRASH(("Could not bind to 0x%8.8X:%d", ip, port));
+#endif
 		DEBUG_LOG(("Transport::init - Failure to bind socket with error code %x", retval));
 		delete m_udpsock;
 		m_udpsock = nullptr;
@@ -507,6 +517,4 @@ Real Transport::getUnknownPacketsPerSecond()
 	}
 	return val / (MAX_TRANSPORT_STATISTICS_SECONDS-1);
 }
-
-
 
