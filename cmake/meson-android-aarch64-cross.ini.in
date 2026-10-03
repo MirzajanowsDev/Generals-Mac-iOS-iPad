@@ -22,7 +22,8 @@ pkg-config   = 'pkg-config'
 windres      = ''
 
 [properties]
-needs_exe_wrapper = false
+# GeneralsX @build Codex 04/10/2026 Host runners cannot execute Android aarch64 test binaries.
+needs_exe_wrapper = true
 
 [host_machine]
 system     = 'android'
@@ -35,7 +36,7 @@ endian     = 'little'
 # -fPIC is required for code that links into a shared library (libdxvk_d3d8.so
 # is dlopen'd by the Android app). -fno-plt and the default PIE settings are
 # handled by the NDK wrapper.
-c_args       = ['-fPIC', '-DANDROID', '-D__ANDROID__']
-cpp_args     = ['-fPIC', '-DANDROID', '-D__ANDROID__']
+c_args       = ['-fPIC', '-DANDROID', '-D__ANDROID__', '-DVK_ENABLE_BETA_EXTENSIONS']
+cpp_args     = ['-fPIC', '-DANDROID', '-D__ANDROID__', '-DVK_ENABLE_BETA_EXTENSIONS']
 c_link_args  = ['-fPIC']
 cpp_link_args= ['-fPIC']

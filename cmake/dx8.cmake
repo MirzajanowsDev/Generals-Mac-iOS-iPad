@@ -106,7 +106,8 @@ elseif(ANDROID)
 
   # pkg-config shim for the FetchContent SDL3 (same rationale as the macOS branch).
   set(DXVK_SDL3_PC_DIR "${CMAKE_BINARY_DIR}/sdl3-pkgconfig")
-  file(WRITE "${DXVK_SDL3_PC_DIR}/sdl3.pc"
+  # GeneralsX @build Codex 04/10/2026 Match Meson's case-sensitive dependency('SDL3') lookup on Linux.
+  file(WRITE "${DXVK_SDL3_PC_DIR}/SDL3.pc"
 "prefix=${CMAKE_BINARY_DIR}/_deps
 libdir=\${prefix}/sdl3-build
 includedir=\${prefix}/sdl3-src/include

@@ -46,6 +46,10 @@ if(SAGE_USE_SDL3)
     set(SDL_QSPI OFF CACHE BOOL "Disable QSPI (unused)" FORCE)
     
     FetchContent_MakeAvailable(SDL3)
+    # GeneralsX @build Codex 04/10/2026 Android DXVK's Meson build consumes this SDL3 library.
+    if(ANDROID AND TARGET dxvk_android_build)
+        add_dependencies(dxvk_android_build SDL3-shared)
+    endif()
     
     # GeneralsX @bugfix BenderAI 22/02/2026 (updated 24/02/2026 for macOS)
     # Before SDL3_image build: force PNG discovery to platform-specific libpng
