@@ -16,7 +16,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Initialize Android DXVK fork
-        run: git submodule update --init references/fbraz3-dxvk
+        run: |
+          git submodule update --init references/fbraz3-dxvk
+          git -C references/fbraz3-dxvk submodule update --init include/native/directx include/vulkan include/spirv
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
