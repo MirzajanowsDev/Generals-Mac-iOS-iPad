@@ -38,9 +38,9 @@ jobs:
       - name: LAN regression checks
         run: |
           mkdir -p build/lan-check
-          g++ -std=c++17 -Wall -Wextra -Werror -ICore/Libraries/Source scripts/qa/lan/lan-ipv4-test.cpp -o build/lan-check/policy
+          g++ -std=c++17 -Wall -Wextra -Werror -iquote Core/Libraries/Source scripts/qa/lan/lan-ipv4-test.cpp -o build/lan-check/policy
           build/lan-check/policy
-          g++ -std=c++17 -Wall -Wextra -Werror -D__ANDROID__ -Iscripts/qa/lan -ICore/Libraries/Source scripts/qa/lan/lan-socket-test.cpp -o build/lan-check/socket
+          g++ -std=c++17 -Wall -Wextra -Werror -D__ANDROID__ -Iscripts/qa/lan -iquote Core/Libraries/Source scripts/qa/lan/lan-socket-test.cpp -o build/lan-check/socket
           build/lan-check/socket
       - name: Build native engine and verified release APK
         run: bash scripts/build/android/build-release-ci.sh
