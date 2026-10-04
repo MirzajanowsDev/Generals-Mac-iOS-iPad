@@ -34,7 +34,9 @@
 #include "Common/GameEngine.h"
 //#include "GameNetwork/NetworkInterface.h"
 #include "GameNetwork/udp.h"
+#ifdef __ANDROID__
 #include "Platform/AndroidLAN.h"
+#endif
 
 
 //-------------------------------------------------------------------------
@@ -473,11 +475,6 @@ UDP::sockStat UDP::GetStatus()
     #endif
     case EBADF:
       return BADF;
-    // GeneralsX @bugfix Codex 04/10/2026 Propagate POSIX bind/routing failures to the LAN error handler.
-    case EADDRINUSE:
-      return ADDRINUSE;
-    case EADDRNOTAVAIL:
-      return ADDRNOTAVAIL;
     default:
       return UNKNOWN;
   }

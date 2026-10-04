@@ -27,7 +27,9 @@
 #include "GameNetwork/IPEnumeration.h"
 #include "GameNetwork/networkutil.h"
 #include "GameClient/ClientInstance.h"
+#ifdef __ANDROID__
 #include "Platform/AndroidLAN.h"
+#endif
 
 #ifndef _WIN32
 #include <errno.h>
@@ -260,4 +262,3 @@ AsciiString IPEnumeration::getMachineName()
 
 	return AsciiString(hostname);
 }
-

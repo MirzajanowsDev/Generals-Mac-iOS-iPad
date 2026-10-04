@@ -37,7 +37,9 @@
 #include "GameClient/MapUtil.h"
 #include "Common/UserPreferences.h"
 #include "GameLogic/GameLogic.h"
+#ifdef __ANDROID__
 #include "Platform/AndroidLAN.h"
+#endif
 
 
 static const UnsignedShort lobbyPort = 8086; ///< This is the UDP port used by all LANAPI communication
