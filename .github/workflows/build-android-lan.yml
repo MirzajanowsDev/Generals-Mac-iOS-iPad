@@ -13,6 +13,8 @@ jobs:
   release:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
+    env:
+      CCACHE_DIR: /home/runner/.cache/ccache
     steps:
       - uses: actions/checkout@v4
       - name: Initialize Android DXVK fork
@@ -33,10 +35,15 @@ jobs:
       - name: Install native build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build pkg-config python3-pip glslang-tools
+          sudo apt-get install -y ninja-build pkg-config python3-pip glslang-tools ccache
           python3 -m pip install --user --break-system-packages meson==1.7.2
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'ndk;27.1.12297006' 'cmake;3.30.5'
+      - uses: actions/cache/restore@v4
+        with:
+          path: /home/runner/.cache/ccache
+          key: android-lan-ndk27-${{ github.sha }}
+          restore-keys: android-lan-ndk27-
       - name: LAN regression checks
         run: |
           mkdir -p build/lan-check
@@ -46,6 +53,11 @@ jobs:
           build/lan-check/socket
       - name: Build native engine and verified release APK
         run: bash scripts/build/android/build-release-ci.sh
+      - uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: /home/runner/.cache/ccache
+          key: android-lan-ndk27-${{ github.sha }}
       - uses: actions/upload-artifact@v4
         with:
           name: GeneralsZH-Android-LAN-release

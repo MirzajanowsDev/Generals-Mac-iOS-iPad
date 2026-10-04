@@ -1191,6 +1191,14 @@ target_include_directories(corei_gameengine_public INTERFACE
     Include
 )
 
+# GeneralsX @build Codex 04/10/2026 Android platform LAN helpers shared by both games.
+# Quote-only search avoids shadowing the standard library's <debug/debug.h>.
+if(ANDROID)
+    target_compile_options(corei_gameengine_private INTERFACE
+        "-iquote${CMAKE_CURRENT_SOURCE_DIR}/../Libraries/Source"
+    )
+endif()
+
 target_link_libraries(corei_gameengine_public INTERFACE
     core_compression
     core_browserdispatch
