@@ -27,8 +27,8 @@ android {
         minSdk 24
         targetSdk 35
         // GeneralsX @build Codex 04/10/2026 Identify the hotspot LAN release in device diagnostics.
-        versionCode 6
-        versionName "0.6-android-lan-diagnostics"
+        versionCode 7
+        versionName "0.7-android-startup-fix"
 
         // Arm64-v8a only: the game is a desktop RTS port; skip armeabi-v7a and
         // ship x86_64 only for emulator debugging via a separate build flavor

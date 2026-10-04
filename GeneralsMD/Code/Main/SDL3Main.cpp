@@ -36,7 +36,7 @@
 #include <android/asset_manager.h>
 #include <android/asset_manager_jni.h>
 #include <android/native_window.h>
-#include <thread>
+#include <pthread.h>
 #endif
 #if defined(__APPLE__)
 #include <TargetConditionals.h>
@@ -82,68 +82,89 @@ static void gx_force_oboe_audio_backend()
 #include <glob.h>     // glob() for Vulkan ICD discovery
 
 #if defined(__ANDROID__)
-// GeneralsX @feature Codex 04/10/2026 Capture native stderr/stdout in release builds.
+// GeneralsX @bugfix Codex 05/10/2026 Bootstrap logging must not use the engine's
+// C++ allocator or libc++ string/thread helpers before memory initialization.
+static struct {
+	char current[2048];
+	char previous[2048];
+	int reader;
+	int logFd;
+} gx_native_log;
+
+static void* gx_native_log_reader(void*)
+{
+	char buffer[2048];
+	size_t written = 0;
+	ssize_t bytes;
+	int logFd = gx_native_log.logFd;
+	while ((bytes = read(gx_native_log.reader, buffer, sizeof(buffer) - 1)) != 0) {
+		if (bytes < 0) { if (errno == EINTR) continue; break; }
+		if (written + bytes > 4u * 1024u * 1024u) {
+			if (logFd >= 0) close(logFd);
+			rename(gx_native_log.current, gx_native_log.previous);
+			logFd = open(gx_native_log.current, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+			written = 0;
+		}
+		if (logFd >= 0) {
+			ssize_t offset = 0;
+			while (offset < bytes) {
+				ssize_t result = write(logFd, buffer + offset, bytes - offset);
+				if (result < 0 && errno == EINTR) continue;
+				if (result <= 0) break;
+				offset += result;
+			}
+			written += bytes;
+		}
+		buffer[bytes] = '\0';
+		__android_log_write(ANDROID_LOG_INFO, "GeneralsNative", buffer);
+	}
+	close(gx_native_log.reader);
+	if (logFd >= 0) close(logFd);
+	return nullptr;
+}
+
 static void gx_start_native_diagnostics()
 {
 	const char* storage = SDL_GetAndroidExternalStoragePath();
 	if (!storage) storage = SDL_GetAndroidInternalStoragePath();
 	if (!storage) return;
-	std::string directory = std::string(storage) + "/diagnostics";
-	if (mkdir(directory.c_str(), 0755) != 0 && errno != EEXIST) return;
-	std::string current = directory + "/native-last.txt";
-	std::string previous = directory + "/native-previous.txt";
-	rename(current.c_str(), previous.c_str());
-	int logFd = open(current.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	char directory[2048];
+	int length = snprintf(directory, sizeof(directory), "%s/diagnostics", storage);
+	if (length < 0 || (size_t)length >= sizeof(directory)) return;
+	if (mkdir(directory, 0755) != 0 && errno != EEXIST) return;
+	length = snprintf(gx_native_log.current, sizeof(gx_native_log.current), "%s/native-last.txt", directory);
+	if (length < 0 || (size_t)length >= sizeof(gx_native_log.current)) return;
+	length = snprintf(gx_native_log.previous, sizeof(gx_native_log.previous), "%s/native-previous.txt", directory);
+	if (length < 0 || (size_t)length >= sizeof(gx_native_log.previous)) return;
+	rename(gx_native_log.current, gx_native_log.previous);
+	gx_native_log.logFd = open(gx_native_log.current, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	if (gx_native_log.logFd < 0) return;
 	int descriptors[2];
-	if (logFd < 0) return;
-	if (pipe(descriptors) != 0) { close(logFd); return; }
-	try {
-		std::thread([reader = descriptors[0], logFd, current, previous]() mutable {
-			char buffer[2048];
-			size_t written = 0;
-			ssize_t bytes;
-			while ((bytes = read(reader, buffer, sizeof(buffer) - 1)) != 0) {
-				if (bytes < 0) { if (errno == EINTR) continue; break; }
-				if (written + bytes > 4u * 1024u * 1024u) {
-					close(logFd);
-					rename(current.c_str(), previous.c_str());
-					logFd = open(current.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
-					written = 0;
-				}
-				if (logFd >= 0) {
-					ssize_t offset = 0;
-					while (offset < bytes) {
-						ssize_t result = write(logFd, buffer + offset, bytes - offset);
-						if (result < 0 && errno == EINTR) continue;
-						if (result <= 0) break;
-						offset += result;
-					}
-					written += bytes;
-				}
-				buffer[bytes] = '\0';
-				__android_log_write(ANDROID_LOG_INFO, "GeneralsNative", buffer);
-			}
-			close(reader);
-			if (logFd >= 0) close(logFd);
-		}).detach();
-	} catch (const std::exception& error) {
-		close(descriptors[0]); close(descriptors[1]); close(logFd);
-		__android_log_print(ANDROID_LOG_ERROR, "GeneralsX", "Cannot start native diagnostics: %s", error.what());
+	if (pipe(descriptors) != 0) { close(gx_native_log.logFd); return; }
+	gx_native_log.reader = descriptors[0];
+	pthread_t thread;
+	int error = pthread_create(&thread, nullptr, gx_native_log_reader, nullptr);
+	if (error != 0) {
+		close(descriptors[0]); close(descriptors[1]); close(gx_native_log.logFd);
+		__android_log_print(ANDROID_LOG_ERROR, "GeneralsX", "Cannot start native diagnostics: %s", strerror(error));
 		return;
 	}
+	pthread_detach(thread);
 	dup2(descriptors[1], STDERR_FILENO);
 	dup2(descriptors[1], STDOUT_FILENO);
 	close(descriptors[1]);
 	setvbuf(stderr, nullptr, _IONBF, 0);
 	setvbuf(stdout, nullptr, _IONBF, 0);
-	__android_log_print(ANDROID_LOG_INFO, "GeneralsX", "Native log: %s", current.c_str());
+	__android_log_print(ANDROID_LOG_INFO, "GeneralsX", "Native log: %s", gx_native_log.current);
 }
 
 static bool gx_has_game_archives(const char* directory)
 {
-	std::string data = std::string(directory) + "/Data/";
-	return access((data + "INI.big").c_str(), R_OK) == 0
-		&& access((data + "INIZH.big").c_str(), R_OK) == 0;
+	char path[2048];
+	int length = snprintf(path, sizeof(path), "%s/Data/INI.big", directory);
+	if (length < 0 || (size_t)length >= sizeof(path) || access(path, R_OK) != 0) return false;
+	length = snprintf(path, sizeof(path), "%s/Data/INIZH.big", directory);
+	return length >= 0 && (size_t)length < sizeof(path) && access(path, R_OK) == 0;
 }
 #endif
 
@@ -381,7 +402,7 @@ int main(int argc, char* argv[])
 	// memory-killed process leaves no tombstone, so we ALSO keep a capped,
 	// filtered file log (the iOS port's hard-won lesson). bionic has no funopen(),
 	// so a simple ring-buffered write() sink replaces it.
-	setenv("DXVK_LOG_LEVEL", "none", 0);
+	setenv("DXVK_LOG_LEVEL", "info", 0);
 	// The engine's StdBIGFileSystem::init() reads "InstallPath" from the registry
 	// to locate the Data/*.big archives. On Android there's no registry — the
 	// env-var fallback (CNC_ZH_INSTALLPATH) provides it. Point it at "." so the
@@ -517,22 +538,8 @@ int main(int argc, char* argv[])
 			if (cache != nullptr) {
 				setenv("DXVK_STATE_CACHE_PATH", cache, 0);
 			}
-			// Capped, filtered stderr file sink (post-mortem evidence after a kill).
-			char logPath[1100], prevPath[1100];
-			snprintf(logPath, sizeof(logPath), "%s/generals-stderr.log", files);
-			snprintf(prevPath, sizeof(prevPath), "%s/generals-stderr-prev.log", files);
-			rename(logPath, prevPath);
-			static int s_logFd = open(logPath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-			if (s_logFd >= 0) {
-				// Redirect the C stderr FILE onto our fd via dup2: portable across
-				// bionic/libc, unlike Darwin's funopen(). Line-buffered so a crash
-				// still flushes recent lines. (Per-frame spam filtering is left to
-				// dxvk.conf + DXVK_LOG_LEVEL=none; a full filter callback would need
-				// a custom FILE backend that bionic does not provide.)
-				fflush(stderr);
-				dup2(s_logFd, STDERR_FILENO);
-				setvbuf(stderr, nullptr, _IOLBF, 0);
-			}
+			// gx_start_native_diagnostics already owns stdout/stderr. Redirecting
+			// stderr again here would hide engine failures from the exported log.
 			// files/extFiles/cache are SDL-owned cached statics — never freed here.
 		}
 	}

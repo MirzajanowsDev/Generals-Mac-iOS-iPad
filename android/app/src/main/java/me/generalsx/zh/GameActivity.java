@@ -29,6 +29,13 @@ public class GameActivity extends SDLActivity {
     @Override
     protected void onCreate(Bundle state) {
         AppDiagnostics.init(this);
+        // GeneralsX @bugfix Codex 05/10/2026 Enable DXVK diagnostics before library preloading.
+        try {
+            android.system.Os.setenv("DXVK_LOG_LEVEL", "info", true);
+            android.system.Os.setenv("DXVK_LOG_PATH", AppDiagnostics.getDirectory().getAbsolutePath(), true);
+        } catch (android.system.ErrnoException error) {
+            AppDiagnostics.write("DXVK LOG", "Cannot configure graphics diagnostics", error);
+        }
         AppDiagnostics.write("GAME ACTIVITY", "Loading native libraries and SDL", null);
         super.onCreate(state);
     }
