@@ -16,6 +16,9 @@ android {
     namespace 'me.generalsx.zh'
     compileSdk 35
     ndkVersion "27.1.12297006"
+    buildFeatures {
+        buildConfig true
+    }
 
     defaultConfig {
         applicationId "me.generalsx.zh"
@@ -24,8 +27,8 @@ android {
         minSdk 24
         targetSdk 35
         // GeneralsX @build Codex 04/10/2026 Identify the hotspot LAN release in device diagnostics.
-        versionCode 5
-        versionName "0.5-android-lan"
+        versionCode 6
+        versionName "0.6-android-lan-diagnostics"
 
         // Arm64-v8a only: the game is a desktop RTS port; skip armeabi-v7a and
         // ship x86_64 only for emulator debugging via a separate build flavor
@@ -168,3 +171,4 @@ configurations.configureEach {
 dependencies {
     implementation 'androidx.appcompat:appcompat:1.7.0'
 }
+

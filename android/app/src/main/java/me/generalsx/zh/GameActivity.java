@@ -20,10 +20,18 @@ import org.libsdl.app.SDLActivity;
 import android.content.Context;
 import android.net.wifi.WifiManager;
 import android.util.Log;
+import android.os.Bundle;
 
 public class GameActivity extends SDLActivity {
     // GeneralsX @bugfix Codex 04/10/2026 Keep Wi-Fi group traffic available while the game is visible.
     private WifiManager.MulticastLock lanMulticastLock;
+
+    @Override
+    protected void onCreate(Bundle state) {
+        AppDiagnostics.init(this);
+        AppDiagnostics.write("GAME ACTIVITY", "Loading native libraries and SDL", null);
+        super.onCreate(state);
+    }
 
     @Override
     protected void onStart() {
@@ -78,3 +86,4 @@ public class GameActivity extends SDLActivity {
         return "SDL_main";
     }
 }
+

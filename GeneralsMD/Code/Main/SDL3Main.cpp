@@ -36,6 +36,7 @@
 #include <android/asset_manager.h>
 #include <android/asset_manager_jni.h>
 #include <android/native_window.h>
+#include <thread>
 #endif
 #if defined(__APPLE__)
 #include <TargetConditionals.h>
@@ -79,6 +80,72 @@ static void gx_force_oboe_audio_backend()
 #include <cstdio>
 #include <unistd.h>   // _exit()
 #include <glob.h>     // glob() for Vulkan ICD discovery
+
+#if defined(__ANDROID__)
+// GeneralsX @feature Codex 04/10/2026 Capture native stderr/stdout in release builds.
+static void gx_start_native_diagnostics()
+{
+	const char* storage = SDL_GetAndroidExternalStoragePath();
+	if (!storage) storage = SDL_GetAndroidInternalStoragePath();
+	if (!storage) return;
+	std::string directory = std::string(storage) + "/diagnostics";
+	if (mkdir(directory.c_str(), 0755) != 0 && errno != EEXIST) return;
+	std::string current = directory + "/native-last.txt";
+	std::string previous = directory + "/native-previous.txt";
+	rename(current.c_str(), previous.c_str());
+	int logFd = open(current.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	int descriptors[2];
+	if (logFd < 0) return;
+	if (pipe(descriptors) != 0) { close(logFd); return; }
+	try {
+		std::thread([reader = descriptors[0], logFd, current, previous]() mutable {
+			char buffer[2048];
+			size_t written = 0;
+			ssize_t bytes;
+			while ((bytes = read(reader, buffer, sizeof(buffer) - 1)) != 0) {
+				if (bytes < 0) { if (errno == EINTR) continue; break; }
+				if (written + bytes > 4u * 1024u * 1024u) {
+					close(logFd);
+					rename(current.c_str(), previous.c_str());
+					logFd = open(current.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+					written = 0;
+				}
+				if (logFd >= 0) {
+					ssize_t offset = 0;
+					while (offset < bytes) {
+						ssize_t result = write(logFd, buffer + offset, bytes - offset);
+						if (result < 0 && errno == EINTR) continue;
+						if (result <= 0) break;
+						offset += result;
+					}
+					written += bytes;
+				}
+				buffer[bytes] = '\0';
+				__android_log_write(ANDROID_LOG_INFO, "GeneralsNative", buffer);
+			}
+			close(reader);
+			if (logFd >= 0) close(logFd);
+		}).detach();
+	} catch (const std::exception& error) {
+		close(descriptors[0]); close(descriptors[1]); close(logFd);
+		__android_log_print(ANDROID_LOG_ERROR, "GeneralsX", "Cannot start native diagnostics: %s", error.what());
+		return;
+	}
+	dup2(descriptors[1], STDERR_FILENO);
+	dup2(descriptors[1], STDOUT_FILENO);
+	close(descriptors[1]);
+	setvbuf(stderr, nullptr, _IONBF, 0);
+	setvbuf(stdout, nullptr, _IONBF, 0);
+	__android_log_print(ANDROID_LOG_INFO, "GeneralsX", "Native log: %s", current.c_str());
+}
+
+static bool gx_has_game_archives(const char* directory)
+{
+	std::string data = std::string(directory) + "/Data/";
+	return access((data + "INI.big").c_str(), R_OK) == 0
+		&& access((data + "INIZH.big").c_str(), R_OK) == 0;
+}
+#endif
 
 // USER INCLUDES (match WinMain.cpp pattern)
 #include "Lib/BaseType.h"
@@ -290,6 +357,7 @@ int main(int argc, char* argv[])
 	// anything else runs. Must be the very first call in main() so OpenAL
 	// picks up ALSOFT_DRIVERS when it initializes its backends.
 	gx_force_oboe_audio_backend();
+	gx_start_native_diagnostics();
 	__android_log_print(ANDROID_LOG_INFO, "GeneralsX", "=== SDL_main entered ===");
 #endif
 
@@ -335,7 +403,7 @@ int main(int argc, char* argv[])
 		if (extFiles != nullptr) {
 			char gameData[1024];
 			snprintf(gameData, sizeof(gameData), "%s/GameData", extFiles);
-			if (access(gameData, R_OK) == 0 && chdir(gameData) == 0) {
+			if (gx_has_game_archives(gameData) && chdir(gameData) == 0) {
 				__android_log_print(ANDROID_LOG_INFO, "GeneralsX", "CWD -> %s (external)", gameData);
 				chdirOk = true;
 			}
@@ -352,13 +420,14 @@ int main(int argc, char* argv[])
 		if (!chdirOk && files != nullptr) {
 			char gameData[1024];
 			snprintf(gameData, sizeof(gameData), "%s/GameData", files);
-			if (access(gameData, R_OK) == 0 && chdir(gameData) == 0) {
+			if (gx_has_game_archives(gameData) && chdir(gameData) == 0) {
 				__android_log_print(ANDROID_LOG_INFO, "GeneralsX", "CWD -> %s (internal)", gameData);
 				chdirOk = true;
 			}
 		}
 		if (!chdirOk) {
-			__android_log_print(ANDROID_LOG_WARN, "GeneralsX", "no GameData dir found, CWD unchanged");
+			__android_log_print(ANDROID_LOG_ERROR, "GeneralsX", "No complete GameData: missing Data/INI.big or Data/INIZH.big");
+			return 1;
 		}
 
 		// GeneralsX @feature android-port 07/07/2026 Extract bundled fonts from
@@ -370,19 +439,9 @@ int main(int argc, char* argv[])
 		// read them via standard stdio.
 		{
 			char fontsDir[1024];
-			const char *extractBase = nullptr;
-			const char *extFiles2 = SDL_GetAndroidExternalStoragePath();
-			if (extFiles2 != nullptr) {
-				snprintf(fontsDir, sizeof(fontsDir), "%s/GameData/fonts", extFiles2);
-				extractBase = fontsDir;
-			}
-			if (extractBase == nullptr) {
-				const char *intFiles2 = SDL_GetAndroidInternalStoragePath();
-				if (intFiles2 != nullptr) {
-					snprintf(fontsDir, sizeof(fontsDir), "%s/GameData/fonts", intFiles2);
-					extractBase = fontsDir;
-				}
-			}
+			// Extract beside the selected archives, where the font locator looks.
+			snprintf(fontsDir, sizeof(fontsDir), "fonts");
+			const char *extractBase = fontsDir;
 
 			if (extractBase != nullptr) {
 				mkdir(extractBase, 0755);
@@ -929,3 +988,4 @@ int main(int argc, char* argv[])
 }
 
 #endif // !_WIN32
+
