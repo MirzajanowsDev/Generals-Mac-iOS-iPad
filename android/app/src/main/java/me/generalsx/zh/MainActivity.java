@@ -126,14 +126,14 @@ public class MainActivity extends Activity {
         page.setPadding(dp(22), dp(28), dp(22), dp(24));
         scroll.addView(page);
 
-        TextView eyebrow = label("ANDROID • УСТАНОВКА ИГРЫ", 12, COLOR_ACCENT, true);
+        TextView eyebrow = label("ANDROID вЂў РЈРЎРўРђРќРћР’РљРђ РР“Р Р«", 12, COLOR_ACCENT, true);
         page.addView(eyebrow);
         TextView title = label("Generals\nZero Hour", 34, COLOR_TEXT, true);
         title.setLineSpacing(0, 0.94f);
         LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(-1, -2);
         titleParams.topMargin = dp(10);
         page.addView(title, titleParams);
-        TextView intro = label("Укажи папки обеих игр. Приложение объединит их данные перед запуском.", 16, COLOR_MUTED, false);
+        TextView intro = label("РЈРєР°Р¶Рё РїР°РїРєРё РѕР±РµРёС… РёРіСЂ. РџСЂРёР»РѕР¶РµРЅРёРµ РѕР±СЉРµРґРёРЅРёС‚ РёС… РґР°РЅРЅС‹Рµ РїРµСЂРµРґ Р·Р°РїСѓСЃРєРѕРј.", 16, COLOR_MUTED, false);
         intro.setLineSpacing(dp(3), 1.04f);
         LinearLayout.LayoutParams introParams = new LinearLayout.LayoutParams(-1, -2);
         introParams.topMargin = dp(10);
@@ -141,9 +141,9 @@ public class MainActivity extends Activity {
         page.addView(intro, introParams);
 
         generalsStatus = addGameCard(page, "01", "Command & Conquer: Generals",
-            "Базовая игра • выбери папку, внутри которой находится Data", true);
+            "Р‘Р°Р·РѕРІР°СЏ РёРіСЂР° вЂў РІС‹Р±РµСЂРё РїР°РїРєСѓ, РІРЅСѓС‚СЂРё РєРѕС‚РѕСЂРѕР№ РЅР°С…РѕРґРёС‚СЃСЏ Data", true);
         zeroHourStatus = addGameCard(page, "02", "Command & Conquer: Generals Zero Hour",
-            "Zero Hour • выбери папку, внутри которой находится Data", false);
+            "Zero Hour вЂў РІС‹Р±РµСЂРё РїР°РїРєСѓ, РІРЅСѓС‚СЂРё РєРѕС‚РѕСЂРѕР№ РЅР°С…РѕРґРёС‚СЃСЏ Data", false);
 
         LinearLayout info = new LinearLayout(this);
         info.setOrientation(LinearLayout.VERTICAL);
@@ -152,9 +152,9 @@ public class MainActivity extends Activity {
         LinearLayout.LayoutParams infoParams = new LinearLayout.LayoutParams(-1, -2);
         infoParams.topMargin = dp(4);
         page.addView(info, infoParams);
-        info.addView(label("КАКИЕ ПАПКИ ВЫБРАТЬ", 12, COLOR_ACCENT, true));
+        info.addView(label("РљРђРљРР• РџРђРџРљР Р’Р«Р‘Р РђРўР¬", 12, COLOR_ACCENT, true));
         TextView instructions = label(
-            "Выбери именно папку игры, где видна папка Data. Сначала Generals, затем Zero Hour. Архивы .big скопируются и объединятся автоматически.",
+            "Р’С‹Р±РµСЂРё РёРјРµРЅРЅРѕ РїР°РїРєСѓ РёРіСЂС‹, РіРґРµ РІРёРґРЅР° РїР°РїРєР° Data. РЎРЅР°С‡Р°Р»Р° Generals, Р·Р°С‚РµРј Zero Hour. РђСЂС…РёРІС‹ .big СЃРєРѕРїРёСЂСѓСЋС‚СЃСЏ Рё РѕР±СЉРµРґРёРЅСЏС‚СЃСЏ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё.",
             14, COLOR_MUTED, false);
         instructions.setLineSpacing(dp(3), 1.0f);
         LinearLayout.LayoutParams instructionsParams = new LinearLayout.LayoutParams(-1, -2);
@@ -184,7 +184,7 @@ public class MainActivity extends Activity {
             } else if (existingGameDataReady && generalsTreeUri == null && zeroHourTreeUri == null) {
                 launchGame();
             } else {
-                importStatus.setText("Выбери обе папки игры выше, затем продолжи.");
+                importStatus.setText("Р’С‹Р±РµСЂРё РѕР±Рµ РїР°РїРєРё РёРіСЂС‹ РІС‹С€Рµ, Р·Р°С‚РµРј РїСЂРѕРґРѕР»Р¶Рё.");
             }
         });
         refreshSetupScreen();
@@ -220,7 +220,7 @@ public class MainActivity extends Activity {
         hintParams.topMargin = dp(12);
         card.addView(hint, hintParams);
 
-        TextView status = label("Папка ещё не выбрана", 13, COLOR_MUTED, false);
+        TextView status = label("РџР°РїРєР° РµС‰С‘ РЅРµ РІС‹Р±СЂР°РЅР°", 13, COLOR_MUTED, false);
         LinearLayout.LayoutParams statusLayout = new LinearLayout.LayoutParams(-1, -2);
         statusLayout.topMargin = dp(12);
         card.addView(status, statusLayout);
@@ -229,7 +229,7 @@ public class MainActivity extends Activity {
         choose.setAllCaps(false);
         choose.setTextSize(14);
         choose.setTextColor(COLOR_TEXT);
-        choose.setText("Выбрать папку");
+        choose.setText("Р’С‹Р±СЂР°С‚СЊ РїР°РїРєСѓ");
         choose.setBackground(roundedBackground(Color.rgb(39, 52, 73), Color.rgb(63, 81, 107)));
         choose.setBackgroundTintList(null);
         LinearLayout.LayoutParams chooseParams = new LinearLayout.LayoutParams(-1, dp(48));
@@ -237,30 +237,30 @@ public class MainActivity extends Activity {
         card.addView(choose, chooseParams);
         choose.setOnClickListener(v -> {
             importStatus.setText("");
-            if (baseGame) pickFolder(REQUEST_IMPORT_GENERALS, "Выбери папку Command & Conquer: Generals");
-            else pickFolder(REQUEST_IMPORT_ZERO_HOUR, "Выбери папку Command & Conquer: Generals Zero Hour");
+            if (baseGame) pickFolder(REQUEST_IMPORT_GENERALS, "Р’С‹Р±РµСЂРё РїР°РїРєСѓ Command & Conquer: Generals");
+            else pickFolder(REQUEST_IMPORT_ZERO_HOUR, "Р’С‹Р±РµСЂРё РїР°РїРєСѓ Command & Conquer: Generals Zero Hour");
         });
         return status;
     }
 
     private void refreshSetupScreen() {
         if (generalsStatus == null || zeroHourStatus == null || importButton == null) return;
-        generalsStatus.setText(generalsTreeUri != null ? "✓ Папка Generals выбрана" :
-            existingGameDataReady ? "✓ Игровые архивы Generals найдены в приложении" : "Папка ещё не выбрана");
+        generalsStatus.setText(generalsTreeUri != null ? "вњ“ РџР°РїРєР° Generals РІС‹Р±СЂР°РЅР°" :
+            existingGameDataReady ? "вњ“ РРіСЂРѕРІС‹Рµ Р°СЂС…РёРІС‹ Generals РЅР°Р№РґРµРЅС‹ РІ РїСЂРёР»РѕР¶РµРЅРёРё" : "РџР°РїРєР° РµС‰С‘ РЅРµ РІС‹Р±СЂР°РЅР°");
         generalsStatus.setTextColor(generalsTreeUri != null || existingGameDataReady ? Color.rgb(118, 221, 158) : COLOR_MUTED);
-        zeroHourStatus.setText(zeroHourTreeUri != null ? "✓ Папка Zero Hour выбрана" :
-            existingGameDataReady ? "✓ Архивы Zero Hour найдены в приложении" : "Папка ещё не выбрана");
+        zeroHourStatus.setText(zeroHourTreeUri != null ? "вњ“ РџР°РїРєР° Zero Hour РІС‹Р±СЂР°РЅР°" :
+            existingGameDataReady ? "вњ“ РђСЂС…РёРІС‹ Zero Hour РЅР°Р№РґРµРЅС‹ РІ РїСЂРёР»РѕР¶РµРЅРёРё" : "РџР°РїРєР° РµС‰С‘ РЅРµ РІС‹Р±СЂР°РЅР°");
         zeroHourStatus.setTextColor(zeroHourTreeUri != null || existingGameDataReady ? Color.rgb(118, 221, 158) : COLOR_MUTED);
         if (generalsTreeUri != null && zeroHourTreeUri != null) {
-            importButton.setText("Объединить данные и запустить");
+            importButton.setText("РћР±СЉРµРґРёРЅРёС‚СЊ РґР°РЅРЅС‹Рµ Рё Р·Р°РїСѓСЃС‚РёС‚СЊ");
             importButton.setEnabled(true);
             importButton.setAlpha(1f);
         } else if (existingGameDataReady && generalsTreeUri == null && zeroHourTreeUri == null) {
-            importButton.setText("Запустить игру");
+            importButton.setText("Р—Р°РїСѓСЃС‚РёС‚СЊ РёРіСЂСѓ");
             importButton.setEnabled(true);
             importButton.setAlpha(1f);
         } else {
-            importButton.setText("Сначала выбери обе папки");
+            importButton.setText("РЎРЅР°С‡Р°Р»Р° РІС‹Р±РµСЂРё РѕР±Рµ РїР°РїРєРё");
             importButton.setEnabled(false);
             importButton.setAlpha(0.58f);
         }
@@ -278,7 +278,7 @@ public class MainActivity extends Activity {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode != REQUEST_IMPORT_GENERALS && requestCode != REQUEST_IMPORT_ZERO_HOUR) return;
         if (resultCode != RESULT_OK || data == null || data.getData() == null) {
-            importStatus.setText("Папка не выбрана. Нажми «Выбрать папку» и попробуй ещё раз.");
+            importStatus.setText("РџР°РїРєР° РЅРµ РІС‹Р±СЂР°РЅР°. РќР°Р¶РјРё В«Р’С‹Р±СЂР°С‚СЊ РїР°РїРєСѓВ» Рё РїРѕРїСЂРѕР±СѓР№ РµС‰С‘ СЂР°Р·.");
             return;
         }
 
@@ -291,8 +291,8 @@ public class MainActivity extends Activity {
         }
         refreshSetupScreen();
         importStatus.setText(generalsTreeUri != null && zeroHourTreeUri != null
-            ? "Обе папки выбраны. Нажми кнопку ниже, чтобы объединить игровые данные."
-            : "Папка выбрана. Теперь выбери вторую игру и продолжи.");
+            ? "РћР±Рµ РїР°РїРєРё РІС‹Р±СЂР°РЅС‹. РќР°Р¶РјРё РєРЅРѕРїРєСѓ РЅРёР¶Рµ, С‡С‚РѕР±С‹ РѕР±СЉРµРґРёРЅРёС‚СЊ РёРіСЂРѕРІС‹Рµ РґР°РЅРЅС‹Рµ."
+            : "РџР°РїРєР° РІС‹Р±СЂР°РЅР°. РўРµРїРµСЂСЊ РІС‹Р±РµСЂРё РІС‚РѕСЂСѓСЋ РёРіСЂСѓ Рё РїСЂРѕРґРѕР»Р¶Рё.");
         importStatus.setTextColor(Color.rgb(118, 221, 158));
     }
 
@@ -314,7 +314,7 @@ public class MainActivity extends Activity {
 
         AlertDialog progress = new AlertDialog.Builder(this)
             .setTitle("Importing game data")
-            .setMessage("Preparing Command & Conquer: Generals…")
+            .setMessage("Preparing Command & Conquer: GeneralsвЂ¦")
             .setCancelable(false)
             .show();
 
@@ -349,7 +349,7 @@ public class MainActivity extends Activity {
 
     private Uri findDataFolder(Uri treeUri) throws IOException {
         Uri childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(
-            treeUri, DocumentsContract.getDocumentId(treeUri));
+            treeUri, DocumentsContract.getTreeDocumentId(treeUri));
         String[] projection = {
             DocumentsContract.Document.COLUMN_DOCUMENT_ID,
             DocumentsContract.Document.COLUMN_DISPLAY_NAME,
@@ -387,7 +387,7 @@ public class MainActivity extends Activity {
         // picker points directly at Data/, put those archives under GameData/Data.
         File destination = dataFolder.equals(installTree)
             ? new File(destRoot, "Data") : destRoot;
-        runOnUiThread(() -> progress.setMessage("Copying " + gameName + "…"));
+        runOnUiThread(() -> progress.setMessage("Copying " + gameName + "вЂ¦"));
         if (!destination.isDirectory() && !destination.mkdirs()) {
             throw new IOException("Cannot create folder " + destination);
         }
@@ -413,7 +413,9 @@ public class MainActivity extends Activity {
     /** Copy a SAF tree; large .big archives are streamed in 1 MB chunks. */
     private void copyTreeRecursive(Uri treeUri, File destDir, AlertDialog progress) throws IOException {
         Uri childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(
-            treeUri, DocumentsContract.getDocumentId(treeUri));
+            treeUri, DocumentsContract.isTreeUri(treeUri)
+                ? DocumentsContract.getTreeDocumentId(treeUri)
+                : DocumentsContract.getDocumentId(treeUri));
         Queue<DirEntry> pending = new ArrayDeque<>();
         copyChildren(childrenUri, destDir, progress, pending);
 
@@ -477,3 +479,4 @@ public class MainActivity extends Activity {
         }
     }
 }
+
