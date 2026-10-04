@@ -58,16 +58,18 @@ adb install GeneralsZH-full.apk
 
 ### Step 3: Copy your game data
 
-The game needs its `.big` archive files on your tablet's filesystem:
+The game needs archives from **both** the base Generals install and the Zero Hour install. On first launch, choose the main Generals folder (the one containing `Data`), then choose the main Zero Hour folder. The app merges them into its private game-data directory, with Zero Hour files copied last. Do not select the `Data` subfolder itself unless your file picker cannot open the parent folder.
+
+Each install's `Data/` folder contains its `.big` archive files. If you stage the files manually instead, merge both installs' `Data/` contents into:
 
 ```bash
 # Create the game data directory on the tablet
 adb shell mkdir -p /sdcard/Android/data/me.generalsx.zh/files/GameData/Data
 
-# Copy ALL .big files from your PC install to the tablet
-# (from your Generals install directory, typically):
-#   C:\Program Files (x86)\Steam\steamapps\common\Generals\
-adb push "*.big" /sdcard/Android/data/me.generalsx.zh/files/GameData/Data/
+# Copy the contents of both PC folders' Data directories here:
+#   C:\Program Files (x86)\Steam\steamapps\common\Command and Conquer Generals\Data\
+#   C:\Program Files (x86)\Steam\steamapps\common\Command and Conquer Generals Zero Hour\Data\
+# Copy Generals first, then Zero Hour so its files take precedence.
 
 # The fonts are bundled in the APK and extract automatically on first launch.
 ```
