@@ -86,6 +86,8 @@ jobs:
         run: |
           cp build/android-game/sdl3-pkgconfig/sdl3.pc build/android-game/sdl3-pkgconfig/SDL3.pc
           PKG_CONFIG_PATH="$PWD/build/android-game/sdl3-pkgconfig" pkg-config --modversion SDL3
+          # This fork references Vulkan portability declarations gated by this define.
+          sed -i "/^cpp_args[[:space:]]*=/s/'-D__ANDROID__'/'-D__ANDROID__', '-DVK_ENABLE_BETA_EXTENSIONS'/" build/android-game/meson-android-aarch64-cross.ini
           cmake --build build/android-game --target dxvk_d3d8_install --parallel 2 2>&1 | tee logs/dxvk.log
 
       - name: Stage runtime libraries and fonts
