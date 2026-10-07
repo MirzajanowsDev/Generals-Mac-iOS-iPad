@@ -52,7 +52,11 @@ jobs:
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.1.12297006" >> "$GITHUB_ENV"
 
       - name: Initialize DXVK and its headers
-        run: git submodule update --init --recursive --depth 1 references/fbraz3-dxvk
+        run: |
+          git submodule update --init --recursive --depth 1 references/fbraz3-dxvk
+          # Deterministic checkout times let Ninja reuse objects for this pinned source.
+          git ls-files -z | xargs -0 touch -d "@$(git show -s --format=%ct HEAD)"
+          git submodule foreach --recursive 'git ls-files -z | xargs -0 touch -d "@$(git show -s --format=%ct HEAD)"'
 
       - name: Restore native build cache
         id: native-cache
@@ -69,7 +73,7 @@ jobs:
             -DRTS_BUILD_OPTION_FFMPEG=OFF -DBUILD_SHARED_LIBS=ON 2>&1 | tee logs/configure.log
 
       - name: Build native engine
-        run: cmake --build build/android-game --target z_generals dxvk_d3d8_install --parallel 2 2>&1 | tee logs/build.log
+        run: cmake --build build/android-game --target z_generals --parallel 2 2>&1 | tee logs/build.log
 
       - name: Save native build cache
         if: steps.native-cache.outputs.cache-hit != 'true'
@@ -77,6 +81,12 @@ jobs:
         with:
           path: source/build/android-game
           key: android-native-linux-ndk27-shared-52cbb68-v1
+
+      - name: Build DXVK runtime
+        run: |
+          cp build/android-game/sdl3-pkgconfig/sdl3.pc build/android-game/sdl3-pkgconfig/SDL3.pc
+          PKG_CONFIG_PATH="$PWD/build/android-game/sdl3-pkgconfig" pkg-config --modversion SDL3
+          cmake --build build/android-game --target dxvk_d3d8_install --parallel 2 2>&1 | tee logs/dxvk.log
 
       - name: Stage runtime libraries and fonts
         run: |
@@ -142,5 +152,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Android-build-logs
-          path: source/logs/
+          path: |
+            source/logs/
+            source/build/android-game/_deps/dxvk-build-android/meson-logs/meson-log.txt
           retention-days: 7
