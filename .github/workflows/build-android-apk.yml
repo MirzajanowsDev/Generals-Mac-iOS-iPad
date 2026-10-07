@@ -1,0 +1,129 @@
+# GeneralsX @build Codex 08/10/2026 Build the Android fork on a Linux runner.
+name: Build Generals Android APK
+
+on:
+  push:
+    branches: [android-apk-build]
+    paths: [.github/workflows/build-android-apk.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+        working-directory: source
+    steps:
+      - name: Checkout Android source
+        uses: actions/checkout@v4
+        with:
+          repository: tarek369/GeneralsZH-Android
+          ref: 52cbb68e4b5ff1856c1d402adf6b4f2ea4725626
+          path: source
+          persist-credentials: false
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+
+      - name: Install native build tools and NDK
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends cmake ninja-build meson pkg-config glslang-tools
+          sdkmanager 'ndk;27.1.12297006' 'platforms;android-35' 'build-tools;35.0.0'
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.1.12297006" >> "$GITHUB_ENV"
+
+      - name: Initialize DXVK and its headers
+        run: git submodule update --init --recursive --depth 1 references/fbraz3-dxvk
+
+      - name: Configure native engine
+        run: |
+          mkdir -p logs
+          cmake --preset android-vulkan -B build/android-game \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
+            -DRTS_BUILD_OPTION_FFMPEG=OFF -DBUILD_SHARED_LIBS=ON 2>&1 | tee logs/configure.log
+
+      - name: Build native engine
+        run: cmake --build build/android-game --target z_generals --parallel 2 2>&1 | tee logs/build.log
+
+      - name: Stage runtime libraries and fonts
+        run: |
+          abi=arm64-v8a
+          jni="android/app/src/main/jniLibs/$abi"
+          assets=android/app/src/main/assets
+          mkdir -p "$jni" "$assets/fonts"
+          for name in libmain.so libdxvk_d3d8.so libdxvk_d3d9.so libSDL3.so libSDL3_image.so libopenal.so libfreetype.so libglm.so libgamespy.so; do
+            src=$(find -L build/android-game -type f -name "$name" -print -quit)
+            if [[ -z "$src" ]]; then
+              echo "Missing native runtime: $name"
+              exit 1
+            fi
+            cp "$src" "$jni/$name"
+          done
+          cp "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so" "$jni/"
+          "$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-debug "$jni/libmain.so"
+          GX_FONTS="$PWD/android-staging/fonts" bash scripts/build/android/stage-fonts.sh
+          cp android-staging/fonts/*.ttf "$assets/fonts/"
+          cp android/config/dxvk.conf "$assets/"
+          printf 'sdk.dir=%s\n' "$ANDROID_HOME" > android/local.properties
+
+      - name: Package APK
+        run: gradle -p android assembleRelease -PSAGE_SKIP_NATIVE_BUILD=true --no-daemon --stacktrace 2>&1 | tee logs/package.log
+
+      - name: Sign and verify APK
+        run: |
+          keystore="$RUNNER_TEMP/generals-debug.keystore"
+          keytool -genkeypair -keystore "$keystore" -storepass android -keypass android \
+            -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname 'CN=Android Debug,O=Android,C=US'
+          tools="$ANDROID_HOME/build-tools/35.0.0"
+          out=android/app/build/outputs/apk/release
+          "$tools/zipalign" -f -p 4 "$out/app-release-unsigned.apk" "$RUNNER_TEMP/aligned.apk"
+          "$tools/apksigner" sign --ks "$keystore" --ks-pass pass:android --key-pass pass:android \
+            --out "$out/app-release.apk" "$RUNNER_TEMP/aligned.apk"
+          "$tools/apksigner" verify --verbose "$out/app-release.apk"
+          python3 - <<'PY'
+          import zipfile
+          path = 'android/app/build/outputs/apk/release/app-release.apk'
+          with zipfile.ZipFile(path) as apk:
+              names = set(apk.namelist())
+              required = ['libmain.so', 'libdxvk_d3d8.so', 'libdxvk_d3d9.so', 'libSDL3.so', 'libSDL3_image.so', 'libopenal.so', 'libfreetype.so', 'libglm.so', 'libgamespy.so', 'libc++_shared.so']
+              missing = [name for name in required if 'lib/arm64-v8a/' + name not in names]
+              assert not missing, f'Missing APK libraries: {missing}'
+              assert 'assets/fonts/arial.ttf' in names
+              print('Verified all native libraries and fonts in APK')
+          PY
+          sha256sum "$out/app-release.apk" | tee "$out/app-release.apk.sha256"
+
+      - name: Upload signed APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeneralsZH-Android-arm64
+          path: |
+            source/android/app/build/outputs/apk/release/app-release.apk
+            source/android/app/build/outputs/apk/release/app-release.apk.sha256
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Android-build-logs
+          path: source/logs/
+          retention-days: 7
