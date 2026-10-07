@@ -54,6 +54,13 @@ jobs:
       - name: Initialize DXVK and its headers
         run: git submodule update --init --recursive --depth 1 references/fbraz3-dxvk
 
+      - name: Restore native build cache
+        id: native-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: source/build/android-game
+          key: android-native-linux-ndk27-shared-52cbb68-v1
+
       - name: Configure native engine
         run: |
           mkdir -p logs
@@ -62,7 +69,14 @@ jobs:
             -DRTS_BUILD_OPTION_FFMPEG=OFF -DBUILD_SHARED_LIBS=ON 2>&1 | tee logs/configure.log
 
       - name: Build native engine
-        run: cmake --build build/android-game --target z_generals --parallel 2 2>&1 | tee logs/build.log
+        run: cmake --build build/android-game --target z_generals dxvk_d3d8_install --parallel 2 2>&1 | tee logs/build.log
+
+      - name: Save native build cache
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: source/build/android-game
+          key: android-native-linux-ndk27-shared-52cbb68-v1
 
       - name: Stage runtime libraries and fonts
         run: |
